@@ -1,8 +1,18 @@
 ## Interface: 30300
-## Title: Warrior Rotation Helper
-## Author: Claude
-## Version: 1.0
-## Notes: Warrior rotation helper for Arms, Fury and Protection specs
+## Title: WarriorRotation
+## Notes: Rotation helper for WotLK
+## Author: Can
+## Version: 1.0.0
 ## SavedVariables: WarriorRotationDB
 
-WarriorRotation.lua
+Init.lua
+DB.lua
+Spells.lua
+Utils.lua
+Engine.lua
+UI/Icons.lua
+UI/Options.lua
+Rotations/Arms.lua
+Rotations/Fury.lua
+Rotations/Prot.lua
+Commands.lua

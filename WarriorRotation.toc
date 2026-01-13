@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Warrior Rotation Helper
+## Author: Claude
+## Version: 1.0
+## Notes: Warrior rotation helper for Arms, Fury and Protection specs
+## SavedVariables: WarriorRotationDB
+
+WarriorRotation.lua

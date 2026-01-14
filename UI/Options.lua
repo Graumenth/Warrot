@@ -1,234 +1,550 @@
 local addonName, addon = ...
 
 local function CreateHeader(parent, text, x, y)
-    local t = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    t:SetPoint("TOPLEFT", x, y)
-    t:SetText(text)
-    t:SetTextColor(1, 0.82, 0)
-    return t
+    local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    header:SetPoint("TOPLEFT", x, y)
+    header:SetText(text)
+    header:SetTextColor(1, 0.82, 0)
+    return header
 end
 
-local function CreateCheckbox(parent, label, getFn, setFn, x, y)
+local function CreateLabel(parent, text, x, y)
+    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetPoint("TOPLEFT", x, y)
+    label:SetText(text)
+    return label
+end
+
+local function CreateCheckbox(parent, label, x, y, getFn, setFn)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", x, y)
     cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cb.text:SetPoint("LEFT", cb, "RIGHT", 5, 0)
+    cb.text:SetPoint("LEFT", cb, "RIGHT", 4, 0)
     cb.text:SetText(label)
-    cb:SetScript("OnClick", function(self) setFn(self:GetChecked() and true or false) end)
+    cb:SetScript("OnClick", function(self)
+        setFn(self:GetChecked() and true or false)
+    end)
     cb._get = getFn
+    cb._set = setFn
     return cb
 end
 
-local function CreateSlider(parent, label, minVal, maxVal, step, getFn, setFn, x, y, w)
-    local s = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    s:SetPoint("TOPLEFT", x, y)
-    s:SetWidth(w or 220)
-    s:SetMinMaxValues(minVal, maxVal)
-    s:SetValueStep(step)
-    s:SetObeyStepOnDrag(true)
-    s.Low:SetText(minVal)
-    s.High:SetText(maxVal)
-    s.Text:SetText(label)
-
-    local vt = s:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    vt:SetPoint("TOP", s, "BOTTOM", 0, 0)
-    s.valueText = vt
-
-    s:SetScript("OnValueChanged", function(self, value)
-        value = math.floor(value + 0.5)
-        self.valueText:SetText(value)
-        setFn(value)
+local function CreateSlider(parent, label, minVal, maxVal, step, x, y, width, getFn, setFn)
+    local slider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
+    slider:SetPoint("TOPLEFT", x, y)
+    slider:SetWidth(width or 200)
+    slider:SetMinMaxValues(minVal, maxVal)
+    slider:SetValueStep(step)
+    slider:SetObeyStepOnDrag(true)
+    slider.Low:SetText(minVal)
+    slider.High:SetText(maxVal)
+    slider.Text:SetText(label)
+    
+    local value = slider:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    value:SetPoint("TOP", slider, "BOTTOM", 0, -2)
+    slider.value = value
+    
+    slider:SetScript("OnValueChanged", function(self, val)
+        val = math.floor(val / step + 0.5) * step
+        self.value:SetText(val)
+        setFn(val)
     end)
-
-    s._get = getFn
-    return s
+    
+    slider._get = getFn
+    slider._set = setFn
+    return slider
 end
 
-local function CreateTabButton(parent, text, x)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetWidth(90)
-    b:SetHeight(22)
-    b:SetText(text)
-    b:SetPoint("TOPLEFT", x, -28)
-    return b
+local function CreateButton(parent, text, x, y, width, height, onClick)
+    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    btn:SetPoint("TOPLEFT", x, y)
+    btn:SetWidth(width or 100)
+    btn:SetHeight(height or 22)
+    btn:SetText(text)
+    btn:SetScript("OnClick", onClick)
+    return btn
+end
+
+local function CreateTabButton(parent, text, x, id)
+    local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    btn:SetPoint("TOPLEFT", x, -30)
+    btn:SetWidth(80)
+    btn:SetHeight(24)
+    btn:SetText(text)
+    btn._id = id
+    return btn
 end
 
 function addon:InitOptions()
-    local f = CreateFrame("Frame", "WarriorRotationOptions", UIParent, "BasicFrameTemplateWithInset")
-    f:SetWidth(520)
-    f:SetHeight(520)
-    f:SetPoint("CENTER")
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    f:Hide()
-
-    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.title:SetPoint("TOP", 0, -6)
-    f.title:SetText("WarriorRotation Options")
-
-    addon.frames.options = f
-
-    local tabs = {}
-    f.tabs = tabs
-
-    local pages = {}
-    f.pages = pages
-
-    local function ShowPage(key)
-        for k, p in pairs(pages) do
-            if k == key then p:Show() else p:Hide() end
-        end
+    local frame = CreateFrame("Frame", "WarriorRotationOptions", UIParent, "BasicFrameTemplateWithInset")
+    frame:SetWidth(550)
+    frame:SetHeight(550)
+    frame:SetPoint("CENTER")
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    frame:SetFrameStrata("DIALOG")
+    frame:Hide()
+    
+    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    frame.title:SetPoint("TOP", 0, -5)
+    frame.title:SetText("WarriorRotation Options")
+    
+    addon.frames.options = frame
+    
+    local ui = {
+        checkboxes = {},
+        sliders = {},
+        tabs = {},
+        pages = {},
+        specButtons = {},
+    }
+    frame.ui = ui
+    
+    local tabs = { "General", "Display", "Arms", "Fury", "Prot" }
+    local tabX = 15
+    for i, name in ipairs(tabs) do
+        local tab = CreateTabButton(frame, name, tabX, name:lower())
+        ui.tabs[name:lower()] = tab
+        tabX = tabX + 85
     end
-
+    
     local function CreatePage()
-        local p = CreateFrame("Frame", nil, f)
-        p:SetPoint("TOPLEFT", 10, -60)
-        p:SetPoint("BOTTOMRIGHT", -10, 10)
-        return p
+        local page = CreateFrame("Frame", nil, frame)
+        page:SetPoint("TOPLEFT", 15, -60)
+        page:SetPoint("BOTTOMRIGHT", -15, 15)
+        page:Hide()
+        return page
     end
-
-    tabs.general = CreateTabButton(f, "General", 12)
-    tabs.display = CreateTabButton(f, "Display", 110)
-    tabs.arms = CreateTabButton(f, "Arms", 208)
-    tabs.fury = CreateTabButton(f, "Fury", 306)
-    tabs.prot = CreateTabButton(f, "Prot", 404)
-
-    pages.general = CreatePage()
-    pages.display = CreatePage()
-    pages.arms = CreatePage()
-    pages.fury = CreatePage()
-    pages.prot = CreatePage()
-
-    tabs.general:SetScript("OnClick", function() ShowPage("general") end)
-    tabs.display:SetScript("OnClick", function() ShowPage("display") end)
-    tabs.arms:SetScript("OnClick", function() ShowPage("arms") end)
-    tabs.fury:SetScript("OnClick", function() ShowPage("fury") end)
-    tabs.prot:SetScript("OnClick", function() ShowPage("prot") end)
-
-    local ui = { checkboxes = {}, sliders = {}, specButtons = {} }
-    f.ui = ui
-
-    do
-        local p = pages.general
-        CreateHeader(p, "General", 10, -10)
-
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Enable Addon", function() return addon.db.enabled end, function(v) addon.db.enabled = v end, 10, -40)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Only In Combat", function() return addon.db.onlyInCombat end, function(v) addon.db.onlyInCombat = v end, 10, -65)
-
-        local y = -110
-        CreateHeader(p, "Active Spec", 10, y)
-        y = y - 30
-
-        local function SpecBtn(spec, xPos)
-            local b = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-            b:SetWidth(110)
-            b:SetHeight(24)
-            b:SetPoint("TOPLEFT", xPos, y)
-            b:SetText(spec:upper())
-            b:SetScript("OnClick", function()
-                addon.db.spec = spec
-                addon:RefreshOptionsUI()
-            end)
-            ui.specButtons[#ui.specButtons + 1] = b
-            b._spec = spec
-        end
-
-        SpecBtn("arms", 10)
-        SpecBtn("fury", 130)
-        SpecBtn("prot", 250)
-
-        y = y - 60
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "Update Interval (ms)", 50, 300, 10,
-            function() return math.floor((addon.db.updateInterval or 0.10) * 1000 + 0.5) end,
-            function(v) addon.db.updateInterval = v / 1000 end,
-            10, y, 260
-        )
+    
+    for _, name in ipairs(tabs) do
+        ui.pages[name:lower()] = CreatePage()
     end
-
-    do
-        local p = pages.display
-        CreateHeader(p, "Display", 10, -10)
-
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Show Cooldowns", function() return addon.db.showCooldowns end, function(v) addon.db.showCooldowns = v end, 10, -40)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Show Range Indicator", function() return addon.db.showRange end, function(v) addon.db.showRange = v end, 10, -65)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Show Keybinds", function() return addon.db.showKeybinds end, function(v) addon.db.showKeybinds = v end, 10, -90)
-
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "Icon Size", 32, 128, 8, function() return addon.db.iconSize end, function(v) addon.db.iconSize = v; addon:ApplyIconLayout() end, 10, -140, 260)
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "Queue Length", 1, 4, 1, function() return addon.db.queueLength end, function(v) addon.db.queueLength = v end, 10, -200, 260)
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "Icon X", -500, 500, 10, function() return addon.db.iconX end, function(v) addon.db.iconX = v; addon:ApplyIconLayout() end, 10, -260, 260)
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "Icon Y", -500, 500, 10, function() return addon.db.iconY end, function(v) addon.db.iconY = v; addon:ApplyIconLayout() end, 10, -320, 260)
-    end
-
-    do
-        local p = pages.arms
-        CreateHeader(p, "Arms", 10, -10)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Rend", function() return addon.db.arms.useRend end, function(v) addon.db.arms.useRend = v end, 10, -40)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Overpower", function() return addon.db.arms.useOverpower end, function(v) addon.db.arms.useOverpower = v end, 10, -65)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Mortal Strike", function() return addon.db.arms.useMortalStrike end, function(v) addon.db.arms.useMortalStrike = v end, 10, -90)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Execute", function() return addon.db.arms.useExecute end, function(v) addon.db.arms.useExecute = v end, 10, -115)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Bladestorm", function() return addon.db.arms.useBladestorm end, function(v) addon.db.arms.useBladestorm = v end, 10, -140)
-
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "Rend Refresh (sec)", 1, 10, 1, function() return addon.db.arms.rendRefresh end, function(v) addon.db.arms.rendRefresh = v end, 10, -190, 260)
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "HS Rage Threshold", 20, 100, 5, function() return addon.db.arms.hsRageThreshold end, function(v) addon.db.arms.hsRageThreshold = v end, 10, -250, 260)
-    end
-
-    do
-        local p = pages.fury
-        CreateHeader(p, "Fury", 10, -10)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Bloodthirst", function() return addon.db.fury.useBloodthirst end, function(v) addon.db.fury.useBloodthirst = v end, 10, -40)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Whirlwind", function() return addon.db.fury.useWhirlwind end, function(v) addon.db.fury.useWhirlwind = v end, 10, -65)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Execute", function() return addon.db.fury.useExecute end, function(v) addon.db.fury.useExecute = v end, 10, -90)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Death Wish", function() return addon.db.fury.useDeathWish end, function(v) addon.db.fury.useDeathWish = v end, 10, -115)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Recklessness", function() return addon.db.fury.useRecklessness end, function(v) addon.db.fury.useRecklessness = v end, 10, -140)
-
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "HS Rage Threshold", 20, 100, 5, function() return addon.db.fury.hsRageThreshold end, function(v) addon.db.fury.hsRageThreshold = v end, 10, -190, 260)
-    end
-
-    do
-        local p = pages.prot
-        CreateHeader(p, "Protection", 10, -10)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Shield Slam", function() return addon.db.prot.useShieldSlam end, function(v) addon.db.prot.useShieldSlam = v end, 10, -40)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Revenge", function() return addon.db.prot.useRevenge end, function(v) addon.db.prot.useRevenge = v end, 10, -65)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Devastate", function() return addon.db.prot.useDevastate end, function(v) addon.db.prot.useDevastate = v end, 10, -90)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Shockwave", function() return addon.db.prot.useShockwave end, function(v) addon.db.prot.useShockwave = v end, 10, -115)
-        ui.checkboxes[#ui.checkboxes + 1] = CreateCheckbox(p, "Use Concussion Blow", function() return addon.db.prot.useConcussionBlow end, function(v) addon.db.prot.useConcussionBlow = v end, 10, -140)
-
-        ui.sliders[#ui.sliders + 1] = CreateSlider(p, "HS Rage Threshold", 20, 100, 5, function() return addon.db.prot.hsRageThreshold end, function(v) addon.db.prot.hsRageThreshold = v end, 10, -190, 260)
-    end
-
-    function addon:RefreshOptionsUI()
-        for _, cb in ipairs(ui.checkboxes) do
-            cb:SetChecked(cb._get() and true or false)
-        end
-        for _, s in ipairs(ui.sliders) do
-            local v = s._get()
-            s:SetValue(v)
-            s.valueText:SetText(v)
-        end
-        for _, b in ipairs(ui.specButtons) do
-            if b._spec == addon.db.spec then
-                b:SetNormalFontObject("GameFontHighlight")
+    
+    local currentPage = "general"
+    
+    local function ShowPage(id)
+        currentPage = id
+        for name, page in pairs(ui.pages) do
+            if name == id then
+                page:Show()
             else
-                b:SetNormalFontObject("GameFontNormal")
+                page:Hide()
+            end
+        end
+        for name, tab in pairs(ui.tabs) do
+            if name == id then
+                tab:SetNormalFontObject("GameFontHighlight")
+            else
+                tab:SetNormalFontObject("GameFontNormal")
             end
         end
     end
-
+    
+    for name, tab in pairs(ui.tabs) do
+        tab:SetScript("OnClick", function() ShowPage(name) end)
+    end
+    
+    do
+        local p = ui.pages.general
+        CreateHeader(p, "General Settings", 10, -10)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Enable Addon", 10, -40,
+            function() return addon.db.enabled end,
+            function(v) addon.db.enabled = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Lock Icon Position", 10, -65,
+            function() return addon.db.locked end,
+            function(v) addon.db.locked = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Only Show In Combat", 10, -90,
+            function() return addon.db.engine.onlyInCombat end,
+            function(v) addon.db.engine.onlyInCombat = v end
+        )
+        
+        CreateHeader(p, "Active Spec", 10, -130)
+        
+        local specNames = { "Arms", "Fury", "Prot" }
+        local specX = 10
+        for _, spec in ipairs(specNames) do
+            local btn = CreateButton(p, spec, specX, -160, 90, 26, function()
+                addon.db.spec = spec:lower()
+                addon:RefreshOptionsUI()
+            end)
+            btn._spec = spec:lower()
+            ui.specButtons[#ui.specButtons+1] = btn
+            specX = specX + 100
+        end
+        
+        CreateButton(p, "Auto-Detect", specX + 20, -160, 100, 26, function()
+            addon:DetectSpec()
+            addon.db.spec = addon.playerSpec
+            addon:RefreshOptionsUI()
+            addon:Print("Spec detected: " .. (addon.playerSpec or "none"):upper())
+        end)
+        
+        CreateHeader(p, "Engine Settings", 10, -210)
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Update Interval (ms)", 20, 200, 10, 10, -250, 220,
+            function() return (addon.db.engine.updateInterval or 0.05) * 1000 end,
+            function(v) addon.db.engine.updateInterval = v / 1000 end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Prediction Window (sec)", 0.5, 3, 0.1, 10, -310, 220,
+            function() return addon.db.engine.predictionWindow or 1.5 end,
+            function(v) addon.db.engine.predictionWindow = v end
+        )
+        
+        CreateHeader(p, "Reset", 10, -370)
+        
+        CreateButton(p, "Reset Position", 10, -400, 120, 24, function()
+            addon.db.display.iconX = 0
+            addon.db.display.iconY = -200
+            addon:ApplyIconLayout()
+            addon:Print("Position reset")
+        end)
+        
+        CreateButton(p, "Reset All Settings", 140, -400, 130, 24, function()
+            StaticPopup_Show("WARRIORROTATION_RESET_CONFIRM")
+        end)
+    end
+    
+    do
+        local p = ui.pages.display
+        CreateHeader(p, "Display Settings", 10, -10)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Show Cooldown Spirals", 10, -40,
+            function() return addon.db.display.showCooldowns end,
+            function(v) addon.db.display.showCooldowns = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Show Range Indicator", 10, -65,
+            function() return addon.db.display.showRange end,
+            function(v) addon.db.display.showRange = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Show Keybinds", 10, -90,
+            function() return addon.db.display.showKeybinds end,
+            function(v) addon.db.display.showKeybinds = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Show Glow Effect", 10, -115,
+            function() return addon.db.display.showGlow end,
+            function(v) addon.db.display.showGlow = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Fade When Out of Range", 10, -140,
+            function() return addon.db.display.fadeOutOfRange end,
+            function(v) addon.db.display.fadeOutOfRange = v end
+        )
+        
+        CreateHeader(p, "Size & Position", 10, -180)
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Icon Size", 32, 128, 4, 10, -220, 220,
+            function() return addon.db.display.iconSize or 64 end,
+            function(v) addon.db.display.iconSize = v; addon:ApplyIconLayout() end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Icon Spacing", 0, 20, 1, 10, -280, 220,
+            function() return addon.db.display.iconSpacing or 8 end,
+            function(v) addon.db.display.iconSpacing = v; addon:ApplyIconLayout() end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Queue Length", 1, 4, 1, 10, -340, 220,
+            function() return addon.db.display.queueLength or 4 end,
+            function(v) addon.db.display.queueLength = v end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Position X", -600, 600, 10, 260, -220, 220,
+            function() return addon.db.display.iconX or 0 end,
+            function(v) addon.db.display.iconX = v; addon:ApplyIconLayout() end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Position Y", -500, 500, 10, 260, -280, 220,
+            function() return addon.db.display.iconY or -200 end,
+            function(v) addon.db.display.iconY = v; addon:ApplyIconLayout() end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Fade Amount", 0.2, 1, 0.1, 260, -340, 220,
+            function() return addon.db.display.fadeAmount or 0.4 end,
+            function(v) addon.db.display.fadeAmount = v end
+        )
+    end
+    
+    do
+        local p = ui.pages.arms
+        CreateHeader(p, "Arms Rotation", 10, -10)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Enable Arms Rotation", 10, -40,
+            function() return addon.db.arms.enabled end,
+            function(v) addon.db.arms.enabled = v end
+        )
+        
+        CreateHeader(p, "Abilities", 10, -80)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Rend", 10, -110,
+            function() return addon.db.arms.useRend end,
+            function(v) addon.db.arms.useRend = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Overpower", 10, -135,
+            function() return addon.db.arms.useOverpower end,
+            function(v) addon.db.arms.useOverpower = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Mortal Strike", 10, -160,
+            function() return addon.db.arms.useMortalStrike end,
+            function(v) addon.db.arms.useMortalStrike = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Execute", 10, -185,
+            function() return addon.db.arms.useExecute end,
+            function(v) addon.db.arms.useExecute = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Bladestorm", 10, -210,
+            function() return addon.db.arms.useBladestorm end,
+            function(v) addon.db.arms.useBladestorm = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Slam", 10, -235,
+            function() return addon.db.arms.useSlam end,
+            function(v) addon.db.arms.useSlam = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Heroic Strike", 10, -260,
+            function() return addon.db.arms.useHeroicStrike end,
+            function(v) addon.db.arms.useHeroicStrike = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Pool Rage for MS", 10, -285,
+            function() return addon.db.arms.poolRageForMS end,
+            function(v) addon.db.arms.poolRageForMS = v end
+        )
+        
+        CreateHeader(p, "Thresholds", 260, -80)
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Execute Phase (%)", 10, 35, 1, 260, -120, 200,
+            function() return addon.db.arms.executePhase or 20 end,
+            function(v) addon.db.arms.executePhase = v end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Rend Refresh (sec)", 1, 10, 1, 260, -180, 200,
+            function() return addon.db.arms.rendRefresh or 5 end,
+            function(v) addon.db.arms.rendRefresh = v end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "HS Rage Threshold", 20, 100, 5, 260, -240, 200,
+            function() return addon.db.arms.hsRageThreshold or 60 end,
+            function(v) addon.db.arms.hsRageThreshold = v end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "HS Execute Threshold", 15, 60, 5, 260, -300, 200,
+            function() return addon.db.arms.hsExecuteThreshold or 30 end,
+            function(v) addon.db.arms.hsExecuteThreshold = v end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Pool Amount", 20, 50, 5, 260, -360, 200,
+            function() return addon.db.arms.poolAmount or 30 end,
+            function(v) addon.db.arms.poolAmount = v end
+        )
+    end
+    
+    do
+        local p = ui.pages.fury
+        CreateHeader(p, "Fury Rotation", 10, -10)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Enable Fury Rotation", 10, -40,
+            function() return addon.db.fury.enabled end,
+            function(v) addon.db.fury.enabled = v end
+        )
+        
+        CreateHeader(p, "Abilities", 10, -80)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Bloodthirst", 10, -110,
+            function() return addon.db.fury.useBloodthirst end,
+            function(v) addon.db.fury.useBloodthirst = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Whirlwind", 10, -135,
+            function() return addon.db.fury.useWhirlwind end,
+            function(v) addon.db.fury.useWhirlwind = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Execute", 10, -160,
+            function() return addon.db.fury.useExecute end,
+            function(v) addon.db.fury.useExecute = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Slam (Bloodsurge)", 10, -185,
+            function() return addon.db.fury.useSlam end,
+            function(v) addon.db.fury.useSlam = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Heroic Strike", 10, -210,
+            function() return addon.db.fury.useHeroicStrike end,
+            function(v) addon.db.fury.useHeroicStrike = v end
+        )
+        
+        CreateHeader(p, "Cooldowns", 10, -250)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Death Wish", 10, -280,
+            function() return addon.db.fury.useDeathWish end,
+            function(v) addon.db.fury.useDeathWish = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Recklessness", 10, -305,
+            function() return addon.db.fury.useRecklessness end,
+            function(v) addon.db.fury.useRecklessness = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Berserker Rage", 10, -330,
+            function() return addon.db.fury.useBerserkerRage end,
+            function(v) addon.db.fury.useBerserkerRage = v end
+        )
+        
+        CreateHeader(p, "Thresholds", 260, -80)
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "Execute Phase (%)", 10, 35, 1, 260, -120, 200,
+            function() return addon.db.fury.executePhase or 20 end,
+            function(v) addon.db.fury.executePhase = v end
+        )
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "HS Rage Threshold", 20, 100, 5, 260, -180, 200,
+            function() return addon.db.fury.hsRageThreshold or 50 end,
+            function(v) addon.db.fury.hsRageThreshold = v end
+        )
+    end
+    
+    do
+        local p = ui.pages.prot
+        CreateHeader(p, "Protection Rotation", 10, -10)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Enable Protection Rotation", 10, -40,
+            function() return addon.db.prot.enabled end,
+            function(v) addon.db.prot.enabled = v end
+        )
+        
+        CreateHeader(p, "Abilities", 10, -80)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Shield Slam", 10, -110,
+            function() return addon.db.prot.useShieldSlam end,
+            function(v) addon.db.prot.useShieldSlam = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Revenge", 10, -135,
+            function() return addon.db.prot.useRevenge end,
+            function(v) addon.db.prot.useRevenge = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Devastate", 10, -160,
+            function() return addon.db.prot.useDevastate end,
+            function(v) addon.db.prot.useDevastate = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Shockwave", 10, -185,
+            function() return addon.db.prot.useShockwave end,
+            function(v) addon.db.prot.useShockwave = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Concussion Blow", 10, -210,
+            function() return addon.db.prot.useConcussionBlow end,
+            function(v) addon.db.prot.useConcussionBlow = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Heroic Strike", 10, -235,
+            function() return addon.db.prot.useHeroicStrike end,
+            function(v) addon.db.prot.useHeroicStrike = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Heroic Throw", 10, -260,
+            function() return addon.db.prot.useHeroicThrow end,
+            function(v) addon.db.prot.useHeroicThrow = v end
+        )
+        
+        CreateHeader(p, "Debuffs", 260, -80)
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Maintain Debuffs", 260, -110,
+            function() return addon.db.prot.maintainDebuffs end,
+            function(v) addon.db.prot.maintainDebuffs = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Thunder Clap", 260, -135,
+            function() return addon.db.prot.useThunderClap end,
+            function(v) addon.db.prot.useThunderClap = v end
+        )
+        
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Use Demoralizing Shout", 260, -160,
+            function() return addon.db.prot.useDemoralizingShout end,
+            function(v) addon.db.prot.useDemoralizingShout = v end
+        )
+        
+        CreateHeader(p, "Thresholds", 260, -200)
+        
+        ui.sliders[#ui.sliders+1] = CreateSlider(p, "HS Rage Threshold", 20, 100, 5, 260, -240, 200,
+            function() return addon.db.prot.hsRageThreshold or 50 end,
+            function(v) addon.db.prot.hsRageThreshold = v end
+        )
+    end
+    
+    StaticPopupDialogs["WARRIORROTATION_RESET_CONFIRM"] = {
+        text = "Are you sure you want to reset all WarriorRotation settings?",
+        button1 = "Yes",
+        button2 = "No",
+        OnAccept = function()
+            addon:ResetDB()
+            addon:Print("All settings reset to defaults")
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+    
     ShowPage("general")
 end
 
+function addon:RefreshOptionsUI()
+    local frame = addon.frames.options
+    if not frame or not frame.ui then return end
+    
+    local ui = frame.ui
+    
+    for _, cb in ipairs(ui.checkboxes) do
+        if cb._get then
+            cb:SetChecked(cb._get())
+        end
+    end
+    
+    for _, slider in ipairs(ui.sliders) do
+        if slider._get then
+            local val = slider._get()
+            slider:SetValue(val)
+            slider.value:SetText(val)
+        end
+    end
+    
+    for _, btn in ipairs(ui.specButtons) do
+        if btn._spec == addon.db.spec then
+            btn:SetNormalFontObject("GameFontHighlight")
+        else
+            btn:SetNormalFontObject("GameFontNormal")
+        end
+    end
+end
+
 function addon:ShowOptions()
-    local f = addon.frames.options
-    if not f then return end
+    local frame = addon.frames.options
+    if not frame then return end
     addon:RefreshOptionsUI()
-    f:Show()
+    frame:Show()
 end
 
 function addon:HideOptions()
-    local f = addon.frames.options
-    if not f then return end
-    f:Hide()
+    local frame = addon.frames.options
+    if not frame then return end
+    frame:Hide()
 end

@@ -29,11 +29,26 @@ end
 function addon:IsSpellKnown(spellID)
     local name = addon:SpellName(spellID)
     if not name then return false end
-    
-    for tab = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(tab)
-        for i = offset + 1, offset + numSpells do
-            local spellName = GetSpellBookItemName(i, BOOKTYPE_SPELL)
+    -- Compatibility: different clients expose different spellbook APIs. Try
+    -- several possible functions to read a spell name from a spellbook slot.
+    local function GetSpellBookName(slot)
+        if type(GetSpellBookItemName) == "function" then
+            return GetSpellBookItemName(slot, BOOKTYPE_SPELL)
+        end
+        if type(GetSpellName) == "function" then
+            return GetSpellName(slot, BOOKTYPE_SPELL)
+        end
+        if type(GetSpellBookItemInfo) == "function" then
+            local n = GetSpellBookItemInfo(slot)
+            return n
+        end
+        return nil
+    end
+
+    for tab = 1, (GetNumSpellTabs and GetNumSpellTabs() or 0) do
+        local a,b,offset,numSpells = GetSpellTabInfo(tab)
+        for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
+            local spellName = GetSpellBookName(i)
             if spellName == name then
                 return true
             end

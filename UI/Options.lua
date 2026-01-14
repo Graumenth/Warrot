@@ -1,4 +1,5 @@
 local addonName, addon = ...
+local _sliderCounter = 0
 
 local function CreateHeader(parent, text, x, y)
     local header = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -30,26 +31,32 @@ local function CreateCheckbox(parent, label, x, y, getFn, setFn)
 end
 
 local function CreateSlider(parent, label, minVal, maxVal, step, x, y, width, getFn, setFn)
-    local slider = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
+    _sliderCounter = _sliderCounter + 1
+    local name = addonName .. "Slider" .. _sliderCounter
+    local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     slider:SetPoint("TOPLEFT", x, y)
     slider:SetWidth(width or 200)
     slider:SetMinMaxValues(minVal, maxVal)
     slider:SetValueStep(step)
-    slider:SetObeyStepOnDrag(true)
-    slider.Low:SetText(minVal)
-    slider.High:SetText(maxVal)
-    slider.Text:SetText(label)
-    
+
+    local low = _G[name .. "Low"]
+    local high = _G[name .. "High"]
+    local text = _G[name .. "Text"]
+
+    if low then low:SetText(minVal) end
+    if high then high:SetText(maxVal) end
+    if text then text:SetText(label) end
+
     local value = slider:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     value:SetPoint("TOP", slider, "BOTTOM", 0, -2)
     slider.value = value
-    
+
     slider:SetScript("OnValueChanged", function(self, val)
         val = math.floor(val / step + 0.5) * step
         self.value:SetText(val)
-        setFn(val)
+        if setFn then pcall(setFn, val) end
     end)
-    
+
     slider._get = getFn
     slider._set = setFn
     return slider
@@ -76,7 +83,8 @@ local function CreateTabButton(parent, text, x, id)
 end
 
 function addon:InitOptions()
-    local frame = CreateFrame("Frame", "WarriorRotationOptions", UIParent, "BasicFrameTemplateWithInset")
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00WarriorRotation|r: InitOptions called")
+    local frame = CreateFrame("Frame", "WarriorRotationOptions", UIParent, "UIPanelDialogTemplate")
     frame:SetWidth(550)
     frame:SetHeight(550)
     frame:SetPoint("CENTER")
@@ -204,7 +212,7 @@ function addon:InitOptions()
         CreateButton(p, "Reset Position", 10, -400, 120, 24, function()
             addon.db.display.iconX = 0
             addon.db.display.iconY = -200
-            addon:ApplyIconLayout()
+            if addon.ApplyIconLayout then addon:ApplyIconLayout() end
             addon:Print("Position reset")
         end)
         
@@ -246,12 +254,12 @@ function addon:InitOptions()
         
         ui.sliders[#ui.sliders+1] = CreateSlider(p, "Icon Size", 32, 128, 4, 10, -220, 220,
             function() return addon.db.display.iconSize or 64 end,
-            function(v) addon.db.display.iconSize = v; addon:ApplyIconLayout() end
+            function(v) addon.db.display.iconSize = v; if addon.ApplyIconLayout then addon:ApplyIconLayout() end end
         )
         
         ui.sliders[#ui.sliders+1] = CreateSlider(p, "Icon Spacing", 0, 20, 1, 10, -280, 220,
             function() return addon.db.display.iconSpacing or 8 end,
-            function(v) addon.db.display.iconSpacing = v; addon:ApplyIconLayout() end
+            function(v) addon.db.display.iconSpacing = v; if addon.ApplyIconLayout then addon:ApplyIconLayout() end end
         )
         
         ui.sliders[#ui.sliders+1] = CreateSlider(p, "Queue Length", 1, 4, 1, 10, -340, 220,
@@ -261,12 +269,17 @@ function addon:InitOptions()
         
         ui.sliders[#ui.sliders+1] = CreateSlider(p, "Position X", -600, 600, 10, 260, -220, 220,
             function() return addon.db.display.iconX or 0 end,
-            function(v) addon.db.display.iconX = v; addon:ApplyIconLayout() end
+            function(v) addon.db.display.iconX = v; if addon.ApplyIconLayout then addon:ApplyIconLayout() end end
         )
         
         ui.sliders[#ui.sliders+1] = CreateSlider(p, "Position Y", -500, 500, 10, 260, -280, 220,
             function() return addon.db.display.iconY or -200 end,
-            function(v) addon.db.display.iconY = v; addon:ApplyIconLayout() end
+            function(v) addon.db.display.iconY = v; if addon.ApplyIconLayout then addon:ApplyIconLayout() end end
+        )
+
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Show Placeholder Icons", 10, -370,
+            function() return addon.db.display.showPlaceholders end,
+            function(v) addon.db.display.showPlaceholders = v; addon:RefreshUIFromDB() end
         )
         
         ui.sliders[#ui.sliders+1] = CreateSlider(p, "Fade Amount", 0.2, 1, 0.1, 260, -340, 220,
@@ -537,6 +550,9 @@ function addon:RefreshOptionsUI()
 end
 
 function addon:ShowOptions()
+    if not addon.frames.options and addon.InitOptions then
+        addon:InitOptions()
+    end
     local frame = addon.frames.options
     if not frame then return end
     addon:RefreshOptionsUI()

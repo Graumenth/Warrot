@@ -4,14 +4,14 @@ _G[addonName] = addon
 
 addon.name = addonName
 addon.version = "2.0.0"
-addon.frames = {}
-addon.modules = {}
-addon.rotations = {}
-addon.classes = {}
+addon.frames = addon.frames or {}
+addon.modules = addon.modules or {}
+addon.rotations = addon.rotations or {}
+addon.classes = addon.classes or {}
 addon.playerClass = nil
 addon.playerSpec = nil
 
-addon.state = {
+addon.state = addon.state or {
     inCombat = false,
     gcdStart = 0,
     gcdDuration = 0,
@@ -43,21 +43,15 @@ local events = {
     "UNIT_SPELLCAST_FAILED",
 }
 
-for _, event in ipairs(events) do
-    eventFrame:RegisterEvent(event)
-end
-
-local function OnCombatLog()
-    local timestamp, eventType, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags = CombatLogGetCurrentEventInfo()
-    
+local function OnCombatLog(timestamp, eventType, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, ...)
     if srcGUID ~= UnitGUID("player") then return end
     
     if eventType == "SWING_MISSED" or eventType == "SPELL_MISSED" then
         local missType
         if eventType == "SWING_MISSED" then
-            missType = select(9, CombatLogGetCurrentEventInfo())
+            missType = select(1, ...)
         else
-            missType = select(12, CombatLogGetCurrentEventInfo())
+            missType = select(4, ...) -- spellId, spellName, spellSchool, missType
         end
         
         if missType == "DODGE" then
@@ -67,18 +61,38 @@ local function OnCombatLog()
     end
     
     if eventType == "SPELL_CAST_SUCCESS" then
-        local spellID = select(9, CombatLogGetCurrentEventInfo()) or select(12, CombatLogGetCurrentEventInfo())
+        local spellID = select(1, ...)
         addon.state.lastCast = spellID
         addon.state.lastCastTime = GetTime()
     end
 end
 
-local function OnEvent(self, event, arg1, ...)
+function addon:DetectSpec()
+    local _, _, _, _, points1 = GetTalentTabInfo(1)
+    local _, _, _, _, points2 = GetTalentTabInfo(2)
+    local _, _, _, _, points3 = GetTalentTabInfo(3)
+    
+    if points1 > points2 and points1 > points3 then
+        addon.playerSpec = "arms"
+    elseif points2 > points1 and points2 > points3 then
+        addon.playerSpec = "fury"
+    else
+        addon.playerSpec = "prot"
+    end
+    
+    if not addon.db.spec or addon.db.spec == "" then
+        addon.db.spec = addon.playerSpec
+    end
+end
+
+local function OnEvent(self, event, ...)
+    local arg1 = ...
+
     if event == "ADDON_LOADED" and arg1 == addonName then
-        addon:InitDB()
-        addon:InitUI()
-        addon:InitEngine()
-        addon:InitCommands()
+        if addon.InitDB then addon:InitDB() end
+        if addon.InitUI then addon:InitUI() end
+        if addon.InitEngine then addon:InitEngine() end
+        if addon.InitCommands then addon:InitCommands() end
         
     elseif event == "PLAYER_LOGIN" then
         local _, class = UnitClass("player")
@@ -89,11 +103,11 @@ local function OnEvent(self, event, arg1, ...)
             return
         end
         
-        addon:DetectSpec()
-        addon:RefreshUIFromDB()
+    if addon.DetectSpec then addon:DetectSpec() end
+    if addon.RefreshUIFromDB then addon:RefreshUIFromDB() end
         
     elseif event == "PLAYER_ENTERING_WORLD" then
-        addon:DetectSpec()
+        if addon.DetectSpec then addon:DetectSpec() end
         
     elseif event == "PLAYER_REGEN_DISABLED" then
         addon.state.inCombat = true
@@ -108,18 +122,18 @@ local function OnEvent(self, event, arg1, ...)
         addon.state.dodged = false
         
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        OnCombatLog()
+        OnCombatLog(...)
         
     elseif event == "UNIT_AURA" and arg1 == "player" then
         addon:UpdateProcs()
         
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" then
-        local spell = ...
+        local spell = select(2, ...)
         addon:OnSpellCast(spell)
     end
 end
 
-eventFrame:SetScript("OnEvent", OnEvent)
+-- event handler and registration will be set after all functions are defined
 
 function addon:DetectSpec()
     local _, _, _, _, points1 = GetTalentTabInfo(1)
@@ -140,6 +154,7 @@ function addon:DetectSpec()
 end
 
 function addon:UpdateProcs()
+    addon.state.procs = addon.state.procs or {}
     local procs = addon.state.procs
     local spells = addon.spells
     if not spells then return end
@@ -161,11 +176,30 @@ function addon:OnSpellCast(spell)
 end
 
 function addon:InitUI()
-    addon:InitIcons()
-    addon:InitOptions()
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00WarriorRotation|r: InitUI called")
+    if not addon.db and addon.InitDB then addon:InitDB() end
+    if addon.InitIcons then addon:InitIcons() end
+    if addon.InitOptions then addon:InitOptions() end
+    if addon.RefreshUIFromDB then addon:RefreshUIFromDB() end
 end
 
 function addon:RefreshUIFromDB()
-    addon:ApplyIconLayout()
+    if addon.ApplyIconLayout then addon:ApplyIconLayout() end
     if addon.RefreshOptionsUI then addon:RefreshOptionsUI() end
+end
+
+eventFrame:SetScript("OnEvent", OnEvent)
+
+for _, event in ipairs(events) do
+    eventFrame:RegisterEvent(event)
+end
+
+if IsAddOnLoaded and IsAddOnLoaded(addonName) and not addon.db then
+    if addon.InitDB then addon:InitDB() end
+    if addon.InitEngine then addon:InitEngine() end
+    if addon.InitCommands then addon:InitCommands() end
+    -- If UI files are already loaded (InitIcons exists), run InitUI now; otherwise it will run later via events
+    if addon.InitIcons and addon.InitOptions and addon.InitUI then
+        addon:InitUI()
+    end
 end

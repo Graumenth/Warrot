@@ -69,7 +69,7 @@ local commands = {
         addon.db.display.iconX = 0
         addon.db.display.iconY = -200
         addon.db.display.iconSize = 64
-        addon:ApplyIconLayout()
+        if addon.ApplyIconLayout then addon:ApplyIconLayout() end
         Print("Icon position reset")
     end,
     
@@ -103,6 +103,16 @@ local commands = {
     ["status"] = function()
         PrintStatus()
     end,
+    ["test"] = function()
+        local rec = addon:GetRecommendation()
+        if rec then
+            Print("Recommendation: " .. tostring(rec) .. " (" .. tostring(addon:SpellName(rec)) .. ")")
+        else
+            Print("No recommendation (queue empty)")
+        end
+        local q = addon:BuildQueue()
+        Print("Queue: " .. (#q) .. " entries")
+    end,
     
     ["debug"] = function()
         addon.db.debug = not addon.db.debug
@@ -113,6 +123,29 @@ local commands = {
         PrintHelp()
     end,
 }
+
+SLASH_WARRIORROTATION1 = "/warriorrotation"
+SLASH_WARRIORROTATION2 = "/warrot"
+SLASH_WARRIORROTATION3 = "/wr"
+
+SlashCmdList["WARRIORROTATION"] = function(msg)
+    Print("Slash handler invoked with: '" .. tostring(msg) .. "'")
+    msg = (msg or ""):lower():match("^%s*(.-)%s*$") or ""
+    local cmd, args = msg:match("^(%S*)%s*(.*)$")
+    cmd = cmd or ""
+    Print("Parsed command: '" .. cmd .. "' args: '" .. tostring(args) .. "'")
+
+    if not commands[cmd] then
+        Print("Unknown command: |cFFFF0000" .. cmd .. "|r")
+        PrintHelp()
+        return
+    end
+
+    local ok, err = pcall(commands[cmd], args)
+    if not ok then
+        Print("Command execution failed: " .. tostring(err))
+    end
+end
 
 function addon:InitCommands()
     SLASH_WARRIORROTATION1 = "/warriorrotation"

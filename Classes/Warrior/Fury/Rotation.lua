@@ -1,5 +1,7 @@
 local addonName, addon = ...
 
+addon.rotations = addon.rotations or {}
+
 local Fury = {}
 addon.rotations.fury = Fury
 

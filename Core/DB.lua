@@ -1,5 +1,14 @@
 local addonName, addon = ...
 
+-- Bootstrap core tables early so other files (rotations, classes, etc.) can
+-- safely write to them even if Core Init hasn't run yet.
+addon.rotations = addon.rotations or {}
+addon.frames = addon.frames or {}
+addon.modules = addon.modules or {}
+addon.state = addon.state or {}
+addon.classes = addon.classes or {}
+addon.spells = addon.spells or {}
+
 local defaults = {
     enabled = true,
     locked = false,
@@ -9,6 +18,7 @@ local defaults = {
         iconSize = 64,
         iconSpacing = 8,
         queueLength = 4,
+        showPlaceholders = true,
         iconX = 0,
         iconY = -200,
         showCooldowns = true,
@@ -103,6 +113,7 @@ function addon:InitDB()
     Merge(WarriorRotationDB, DeepCopy(defaults))
     addon.db = WarriorRotationDB
     addon.defaults = defaults
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00WarriorRotation|r: DB initialized")
 end
 
 function addon:ResetDB(section)

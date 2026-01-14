@@ -92,15 +92,34 @@ end
 
 function addon:BuildQueue()
     local db = addon.db
-    if not db.enabled then return {} end
+    if db and db.debug then
+        addon:Debug("BuildQueue called. enabled=" .. tostring(db.enabled) .. " spec=" .. tostring(db.spec) .. " playerSpec=" .. tostring(addon.playerSpec))
+    end
+    if not db or not db.enabled then
+        if db and db.debug then addon:Debug("BuildQueue: disabled or missing db") end
+        return {}
+    end
     
     local state = BuildState()
-    if not state.hasTarget then return {} end
-    if db.engine.onlyInCombat and not state.inCombat then return {} end
+    if not state.hasTarget then
+        if db.debug then addon:Debug("BuildQueue: no valid target") end
+        return {}
+    end
+    if db.engine.onlyInCombat and not state.inCombat then
+        if db.debug then addon:Debug("BuildQueue: onlyInCombat and not in combat") end
+        return {}
+    end
     
     local spec = db.spec
     local rotation = addon.rotations[spec]
-    if not rotation then return {} end
+    if not rotation then
+        if db.debug then addon:Debug("BuildQueue: no rotation for spec '" .. tostring(spec) .. "'") end
+        return {}
+    end
+    if addon.db[spec] and addon.db[spec].enabled == false then
+        if db.debug then addon:Debug("BuildQueue: spec '"..tostring(spec).."' is disabled in DB") end
+        return {}
+    end
     
     local maxLen = db.display.queueLength or 4
     local queue = {}
@@ -108,13 +127,21 @@ function addon:BuildQueue()
     rotation:Build(queue, maxLen, state, AddToQueue)
     
     SortQueue(queue)
-    
-    return FlattenQueue(queue)
+
+    local flat = FlattenQueue(queue)
+    if db.debug then
+        local s = "BuildQueue result:";
+        for i, id in ipairs(flat) do s = s .. " " .. tostring(id) end
+        addon:Debug(s)
+    end
+
+    return flat
 end
 
 function addon:GetRecommendation()
     local queue = addon:BuildQueue()
     if #queue > 0 then
+        if addon.db and addon.db.debug then addon:Debug("GetRecommendation: " .. tostring(queue[1])) end
         return queue[1]
     end
     return nil

@@ -1,20 +1,22 @@
 ## Interface: 30300
 ## Title: WarriorRotation
-## Notes: Hekili-style rotation helper for WotLK Warriors
+## Notes: A rotation helper for WotLK Warriors
 ## Author: Can
 ## Version: 2.0.0
 ## SavedVariables: WarriorRotationDB
 
-Core\Init.lua
 Core\DB.lua
 Core\Utils.lua
-Core\Engine.lua
-Core\Commands.lua
 
 Classes\Warrior\Spells.lua
 Classes\Warrior\Arms\Rotation.lua
 Classes\Warrior\Fury\Rotation.lua
 Classes\Warrior\Prot\Rotation.lua
 
+Core\Engine.lua
+Core\Commands.lua
+
 UI\Icons.lua
 UI\Options.lua
+
+Core\Init.lua

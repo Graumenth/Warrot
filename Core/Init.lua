@@ -41,6 +41,9 @@ local events = {
     "UNIT_SPELLCAST_START",
     "UNIT_SPELLCAST_STOP",
     "UNIT_SPELLCAST_FAILED",
+    "LEARNED_SPELL_IN_TAB",
+    "SPELLS_CHANGED",
+    "PLAYER_LEVEL_UP",
 }
 
 local function OnCombatLog(timestamp, eventType, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, ...)
@@ -93,6 +96,7 @@ local function OnEvent(self, event, ...)
         if addon.InitUI then addon:InitUI() end
         if addon.InitEngine then addon:InitEngine() end
         if addon.InitCommands then addon:InitCommands() end
+        if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
         
     elseif event == "PLAYER_LOGIN" then
         local _, class = UnitClass("player")
@@ -108,6 +112,7 @@ local function OnEvent(self, event, ...)
         
     elseif event == "PLAYER_ENTERING_WORLD" then
         if addon.DetectSpec then addon:DetectSpec() end
+            if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
         
     elseif event == "PLAYER_REGEN_DISABLED" then
         addon.state.inCombat = true
@@ -130,6 +135,10 @@ local function OnEvent(self, event, ...)
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" then
         local spell = select(2, ...)
         addon:OnSpellCast(spell)
+    -- spellbook / level changes may affect known spells
+    elseif event == "LEARNED_SPELL_IN_TAB" or event == "SPELLS_CHANGED" or event == "PLAYER_LEVEL_UP" then
+        if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
+        if addon.RefreshUIFromDB then addon:RefreshUIFromDB() end
     end
 end
 
@@ -181,6 +190,10 @@ function addon:InitUI()
     if addon.InitIcons then addon:InitIcons() end
     if addon.InitOptions then addon:InitOptions() end
     if addon.RefreshUIFromDB then addon:RefreshUIFromDB() end
+    -- If user enabled showing spell IDs, install mouseover hook now
+    if addon.db and addon.db.display and addon.db.display.showSpellIDs and addon.InstallSpellIDMouseoverHook then
+        addon:InstallSpellIDMouseoverHook()
+    end
 end
 
 function addon:RefreshUIFromDB()

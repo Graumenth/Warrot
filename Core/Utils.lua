@@ -65,16 +65,65 @@ end
 function addon:RefreshKnownSpells()
     addon.knownSpells = addon.knownSpells or {}
     wipe(addon.knownSpells)
+    local function GetSpellBookName(slot)
+        if type(GetSpellBookItemName) == "function" then
+            return GetSpellBookItemName(slot, BOOKTYPE_SPELL)
+        end
+        if type(GetSpellName) == "function" then
+            return GetSpellName(slot, BOOKTYPE_SPELL)
+        end
+        if type(GetSpellBookItemInfo) == "function" then
+            return GetSpellBookItemInfo(slot)
+        end
+        return nil
+    end
 
     for tab = 1, (GetNumSpellTabs and GetNumSpellTabs() or 0) do
         local a,b,offset,numSpells = GetSpellTabInfo(tab)
         for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
-            local spellName = GetSpellBookItemName and GetSpellBookItemName(i, BOOKTYPE_SPELL) or GetSpellBookItemInfo and GetSpellBookItemInfo(i)
+            local spellName = GetSpellBookName(i)
             if spellName and spellName ~= "" then
-                addon.knownSpells[spellName] = true
+                -- try to get spellID from link if possible
+                local id
+                local hasLink, link
+                if type(GetSpellLink) == "function" then
+                    link = GetSpellLink(i, BOOKTYPE_SPELL)
+                    if link and type(link) == "string" then
+                        id = tonumber(link:match("spell:(%d+)") )
+                    end
+                end
+
+                -- fallback: try GetSpellBookItemInfo to get name and possibly id
+                if not id and type(GetSpellBookItemInfo) == "function" then
+                    local info = { GetSpellBookItemInfo(i) }
+                    -- GetSpellBookItemInfo may return spellName as first return
+                    -- and sometimes spellID as other returns in some clients; try to find number
+                    for _, v in ipairs(info) do
+                        if type(v) == "number" then id = v; break end
+                    end
+                end
+
+                -- store highest id for this base name (strip rank from display name)
+                local base = spellName:gsub("%s*%(.+%)", "")
+                base = base:gsub("^%s+", ""):gsub("%s+$", "")
+                addon.knownSpells[base] = addon.knownSpells[base] or {}
+                if id then
+                    addon.knownSpells[base].id = math.max(addon.knownSpells[base].id or 0, id)
+                end
+                addon.knownSpells[base].name = base
             end
         end
     end
+    if addon.UpdateKnownSpellsUI then pcall(addon.UpdateKnownSpellsUI, addon) end
+end
+
+function addon:GetKnownSpells()
+    local list = {}
+    for name, info in pairs(addon.knownSpells or {}) do
+        list[#list+1] = { name = name, id = info.id }
+    end
+    table.sort(list, function(a,b) return a.name < b.name end)
+    return list
 end
 
 function addon:GetGCD()

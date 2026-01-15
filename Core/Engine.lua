@@ -31,7 +31,7 @@ local function BuildState()
     
     s.dodged = addon.state.dodged and (addon.state.dodgeExpire > s.time)
     
-    local procs = addon.state.procs
+    local procs = addon.state.procs or {}
     s.suddenDeath = procs.suddenDeath or false
     s.tasteForBlood = procs.tasteForBlood or false
     s.bloodsurge = procs.bloodsurge or false
@@ -63,6 +63,8 @@ end
 local function AddToQueue(queue, spellID, priority, maxLen)
     if #queue >= maxLen then return false end
     if not spellID then return false end
+    -- Don't add spells the player doesn't know or that have no icon
+    if not addon:IsSpellKnown(spellID) then return false end
     if not addon:SpellTexture(spellID) then return false end
     
     for _, entry in ipairs(queue) do

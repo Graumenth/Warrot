@@ -34,9 +34,12 @@ function Prot:Build(queue, maxLen, state, Add)
         end
     end
     
-    if db.useRevenge and addon:IsSpellReady(sp.Revenge) then
+    if db.useRevenge then
+        if not state.revengeReady and addon.db and addon.db.debug then addon:Debug("Prot: Revenge proc not active") end
+        if state.revengeReady and addon:IsSpellReady(sp.Revenge) then
         if rage >= addon:GetRageCost(sp.Revenge) then
             Add(queue, sp.Revenge, PRIORITY.REVENGE, maxLen)
+        end
         end
     end
     

@@ -111,7 +111,7 @@ function addon:InitOptions()
     }
     frame.ui = ui
     
-    local tabs = { "General", "Display", "Arms", "Fury", "Prot" }
+    local tabs = { "General", "Display", "Arms", "Fury", "Prot", "Known" }
     local tabX = 15
     for i, name in ipairs(tabs) do
         local tab = CreateTabButton(frame, name, tabX, name:lower())
@@ -286,6 +286,63 @@ function addon:InitOptions()
             function() return addon.db.display.fadeAmount or 0.4 end,
             function(v) addon.db.display.fadeAmount = v end
         )
+
+        ui.checkboxes[#ui.checkboxes+1] = CreateCheckbox(p, "Show Spell IDs on Spellbook Mouseover", 10, -410,
+            function() return addon.db.display.showSpellIDs end,
+            function(v)
+                addon.db.display.showSpellIDs = v
+                if v then
+                    if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
+                    if addon.InstallSpellIDMouseoverHook then addon:InstallSpellIDMouseoverHook() end
+                end
+            end
+        )
+    end
+
+    do
+        local p = ui.pages.known
+        CreateHeader(p, "Known Spells", 10, -10)
+
+        p.refreshBtn = CreateButton(p, "Refresh Known Spells", 10, -40, 160, 24, function()
+            if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
+            if addon.UpdateKnownSpellsUI then addon:UpdateKnownSpellsUI() end
+        end)
+
+        -- Scroll area
+        local scroll = CreateFrame("ScrollFrame", "WarriorRotationKnownScroll", p, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 10, -80)
+        scroll:SetPoint("BOTTOMRIGHT", -35, 10)
+
+        local content = CreateFrame("Frame", nil, scroll)
+        content:SetWidth(480)
+        content:SetHeight(400)
+        scroll:SetScrollChild(content)
+
+        p.content = content
+        -- Multi-line, copyable edit box for known spells (avoid template incompatibilities)
+        local edit = CreateFrame("EditBox", nil, content)
+        edit:SetMultiLine(true)
+        edit:SetAutoFocus(false)
+        edit:SetFontObject("GameFontNormal")
+        edit:SetWidth(440)
+        edit:SetHeight(360)
+        edit:SetPoint("TOPLEFT", 10, 0)
+        edit:EnableMouse(true)
+        edit:EnableKeyboard(true)
+        edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        edit:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        edit:SetText("")
+        -- make it read-only so accidental typing doesn't change it
+        if edit.SetEditable then pcall(function() edit:SetEditable(false) end) end
+        p.editBox = edit
+
+        p.copyBtn = CreateButton(p, "Copy All", 200, -40, 100, 24, function()
+            if p.editBox then
+                p.editBox:SetFocus()
+                -- highlight all text for easy copy
+                if p.editBox.HighlightText then p.editBox:HighlightText() end
+            end
+        end)
     end
     
     do
@@ -556,6 +613,7 @@ function addon:ShowOptions()
     local frame = addon.frames.options
     if not frame then return end
     addon:RefreshOptionsUI()
+    if addon.UpdateKnownSpellsUI then addon:UpdateKnownSpellsUI() end
     frame:Show()
 end
 
@@ -563,4 +621,120 @@ function addon:HideOptions()
     local frame = addon.frames.options
     if not frame then return end
     frame:Hide()
+end
+
+function addon:UpdateKnownSpellsUI()
+    local frame = addon.frames.options
+    if not frame or not frame.ui then return end
+    local p = frame.ui.pages.known
+    if not p then return end
+    if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
+    local specs = { "arms", "fury", "prot" }
+    local specSpells = {
+        arms = { "Overpower", "MortalStrike", "Rend", "Bladestorm", "Slam", "HeroicStrike", "Execute" },
+        fury = { "Bloodthirst", "Whirlwind", "DeathWish", "BerserkerRage", "Recklessness", "Slam", "HeroicStrike", "Execute" },
+        prot = { "ShieldSlam", "Revenge", "Devastate", "Shockwave", "ConcussionBlow", "ThunderClap", "DemoralizingShout", "HeroicThrow" },
+    }
+
+    local lines = {}
+    for _, spec in ipairs(specs) do
+        lines[#lines+1] = string.upper(spec)
+        for _, key in ipairs(specSpells[spec]) do
+            local id = addon.spells and addon.spells[key]
+            local name = addon:SpellName(id) or key
+            local known = id and addon:IsSpellKnown(id)
+            local idText = id and tostring(id) or "unknown"
+            local knownText = known and "(known)" or "(unknown)"
+            lines[#lines+1] = string.format("- %s %s — ID: %s", name, knownText, idText)
+        end
+        lines[#lines+1] = ""
+    end
+
+    if p.editBox then
+        p.editBox:SetText(table.concat(lines, "\n"))
+    end
+end
+
+function addon:InstallSpellIDMouseoverHook()
+    if addon._spellIDHookInstalled then return end
+    addon._spellIDHookInstalled = true
+    if addon.RefreshKnownSpells then addon:RefreshKnownSpells() end
+    if type(hooksecurefunc) ~= "function" then return end
+
+    -- Attach to existing SpellBook buttons (safe for clients where SpellButton_OnEnter is local)
+    local function attachToSpellButtons()
+        for i = 1, 200 do
+            local btn = _G["SpellButton" .. i]
+            if btn and not btn._wr_hooked then
+                btn:HookScript("OnEnter", function(self)
+                    if not addon.db or not addon.db.display or not addon.db.display.showSpellIDs then return end
+                    local id
+                    -- try via GetSpellLink(slot)
+                    pcall(function()
+                        if type(GetSpellLink) == "function" then
+                            local link = GetSpellLink(self:GetID(), BOOKTYPE_SPELL)
+                            if link and type(link) == "string" then
+                                id = tonumber(link:match("spell:(%d+)"))
+                            end
+                        end
+                    end)
+
+                    -- fallback: use visible name and knownSpells cache
+                    if not id then
+                        local nameFS = _G[self:GetName() .. "Name"]
+                        local spellName = nameFS and nameFS.GetText and nameFS:GetText() or nil
+                        if spellName and spellName ~= "" then
+                            local base = spellName:gsub("%s*%(.+%)", ""):gsub("^%s+", ""):gsub("%s+$", "")
+                            local info = addon.knownSpells and addon.knownSpells[base]
+                            id = info and info.id
+                        end
+                    end
+
+                    if id and GameTooltip and GameTooltip:IsShown() then
+                        GameTooltip:AddLine("Spell ID: " .. tostring(id), 0.8, 0.8, 0.8)
+                        GameTooltip:Show()
+                    end
+                end)
+                btn._wr_hooked = true
+            end
+        end
+    end
+
+    attachToSpellButtons()
+    if type(hooksecurefunc) == "function" and SpellBookFrame_Update then
+        hooksecurefunc("SpellBookFrame_Update", attachToSpellButtons)
+    end
+
+    -- Fallback: hook tooltip spell set to show spell id when available
+    if GameTooltip and GameTooltip.HookScript then
+        GameTooltip:HookScript("OnTooltipSetSpell", function(self)
+            if not addon.db or not addon.db.display or not addon.db.display.showSpellIDs then return end
+            pcall(function()
+                local _, id = nil, nil
+                if self.GetSpell then
+                    local name, rank, spellID = self:GetSpell()
+                    id = spellID or id
+                elseif self.GetOwner then
+                    -- older clients: try to parse the first line of tooltip text as spell name and lookup
+                    local owner = self:GetOwner()
+                    if owner and owner.GetName then
+                        local btnName = owner:GetName()
+                        if btnName and _G[btnName .. "Name"] then
+                            local sname = _G[btnName .. "Name"]:GetText()
+                            if sname then
+                                local base = sname:gsub("%s*%(.+%)", ""):gsub("^%s+", ""):gsub("%s+$", "")
+                                local info = addon.knownSpells and addon.knownSpells[base]
+                                id = info and info.id
+                            end
+                        end
+                    end
+                end
+
+                if id and GameTooltip and GameTooltip:IsShown() then
+                    GameTooltip:AddLine("Spell ID: " .. tostring(id), 0.8, 0.8, 0.8)
+                    GameTooltip:Show()
+                end
+            end)
+        end)
+    end
 end

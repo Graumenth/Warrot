@@ -68,6 +68,12 @@ function Arms:Build(queue, maxLen, state, Add)
             Add(queue, sp.Rend, PRIORITY.REND, maxLen)
         end
     end
+
+    if db.useRend and addon.db and addon.db.debug then
+        if not addon:IsSpellKnown(sp.Rend) then addon:Debug("Arms: Rend not known") end
+        if not addon:IsSpellReady(sp.Rend) then addon:Debug("Arms: Rend not ready (cooldown or unusable)") end
+        if pooling then addon:Debug("Arms: Not casting Rend because pooling for MS") end
+    end
     
     if db.useBladestorm and addon:IsSpellReady(sp.Bladestorm) and not pooling then
         if rage >= addon:GetRageCost(sp.Bladestorm) and not state.executePhase then

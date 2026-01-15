@@ -15,12 +15,14 @@ local UnitIsDead = UnitIsDead
 local UnitCanAttack = UnitCanAttack
 local UnitAffectingCombat = UnitAffectingCombat
 
+-- Tooltip scanner for Rage cost
 local scanTooltip = CreateFrame("GameTooltip", "WarriorRotationScanTooltip", nil, "GameTooltipTemplate")
 scanTooltip:SetOwner(WorldFrame, "ANCHOR_NONE")
 
 function addon:SpellName(spellID)
-    if not spellID then return nil end
-    return GetSpellInfo(spellID)
+    if not spellID or spellID == 0 then return nil end
+    local name = GetSpellInfo(spellID)
+    return name
 end
 
 function addon:SpellTexture(spellID)
@@ -29,88 +31,59 @@ function addon:SpellTexture(spellID)
     return tex
 end
 
-function addon:IsSpellKnown(spellID)
-    local name = addon:SpellName(spellID)
-    if not name then return false end
-    local function GetSpellBookName(slot)
-        if type(GetSpellBookItemName) == "function" then
-            return GetSpellBookItemName(slot, BOOKTYPE_SPELL)
-        end
-        if type(GetSpellName) == "function" then
-            return GetSpellName(slot, BOOKTYPE_SPELL)
-        end
-        if type(GetSpellBookItemInfo) == "function" then
-            local n = GetSpellBookItemInfo(slot)
-            return n
-        end
-        return nil
-    end
-
-    if addon.knownSpells and addon.knownSpells[name] then
-        return true
-    end
-
-    for tab = 1, (GetNumSpellTabs and GetNumSpellTabs() or 0) do
-        local a,b,offset,numSpells = GetSpellTabInfo(tab)
-        for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
-            local spellName = GetSpellBookName(i)
-            if spellName == name then
-                return true
+function addon:RefreshKnownSpells()
+    addon.knownSpells = addon.knownSpells or {}
+    -- Cache'i temizlemiyoruz, üzerine yazıyoruz ki veri kaybı olmasın
+    
+    local numTabs = GetNumSpellTabs()
+    for tab = 1, numTabs do
+        local _, _, offset, numSpells = GetSpellTabInfo(tab)
+        for i = offset + 1, offset + numSpells do
+            -- Kitaptaki her bir slotu tara
+            local spellName, _ = GetSpellName(i, BOOKTYPE_SPELL)
+            local link = GetSpellLink(i, BOOKTYPE_SPELL)
+            
+            if spellName and link then
+                -- ID'yi Linkten Ayıkla (Kesin Çözüm)
+                local idStr = link:match("spell:(%d+)")
+                if idStr then
+                    local id = tonumber(idStr)
+                    
+                    -- Normalize Name (Rank bilgisini temizle)
+                    local baseName = spellName:gsub("%s*%(.+%)", ""):gsub("^%s+", ""):gsub("%s+$", "")
+                    
+                    addon.knownSpells[baseName] = addon.knownSpells[baseName] or {}
+                    
+                    -- En yüksek ID'yi (en son rank) kaydet
+                    local currentMax = addon.knownSpells[baseName].id or 0
+                    if id > currentMax then
+                        addon.knownSpells[baseName].id = id
+                        addon.knownSpells[baseName].name = baseName
+                    end
+                end
             end
         end
+    end
+    
+    -- Eğer UI açıksan güncelle
+    if addon.UpdateKnownSpellsUI then pcall(addon.UpdateKnownSpellsUI, addon) end
+end
+
+function addon:IsSpellKnown(spellID)
+    -- ID ile direkt kontrol (GetSpellInfo 3.3.5'te spellbookta varsa dolu döner)
+    local name = GetSpellInfo(spellID)
+    if name then
+        -- Bir de bizim cache'e bakalım, garanti olsun
+        if addon.knownSpells and addon.knownSpells[name] then
+            return true
+        end
+        -- Eğer spellbookta adı geçiyorsa biliyoruzdur
+        local sbName = GetSpellInfo(name)
+        if sbName then return true end
     end
     return false
 end
 
-function addon:RefreshKnownSpells()
-    addon.knownSpells = addon.knownSpells or {}
-    wipe(addon.knownSpells)
-    local function GetSpellBookName(slot)
-        if type(GetSpellBookItemName) == "function" then
-            return GetSpellBookItemName(slot, BOOKTYPE_SPELL)
-        end
-        if type(GetSpellName) == "function" then
-            return GetSpellName(slot, BOOKTYPE_SPELL)
-        end
-        if type(GetSpellBookItemInfo) == "function" then
-            return GetSpellBookItemInfo(slot)
-        end
-        return nil
-    end
-
-    for tab = 1, (GetNumSpellTabs and GetNumSpellTabs() or 0) do
-        local a,b,offset,numSpells = GetSpellTabInfo(tab)
-        for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
-            local spellName = GetSpellBookName(i)
-            if spellName and spellName ~= "" then
-                local id
-                local hasLink, link
-                if type(GetSpellLink) == "function" then
-                    link = GetSpellLink(i, BOOKTYPE_SPELL)
-                    if link and type(link) == "string" then
-                        id = tonumber(link:match("spell:(%d+)") )
-                    end
-                end
-
-                if not id and type(GetSpellBookItemInfo) == "function" then
-                    local info = { GetSpellBookItemInfo(i) }
-                    for _, v in ipairs(info) do
-                        if type(v) == "number" then id = v; break end
-                    end
-                end
-
-                local base = spellName:gsub("%s*%(.+%)", "")
-                base = base:gsub("^%s+", ""):gsub("%s+$", "")
-                addon.knownSpells[base] = addon.knownSpells[base] or {}
-                if id then
-                    addon.knownSpells[base].id = math.max(addon.knownSpells[base].id or 0, id)
-                end
-                addon.knownSpells[base].name = base
-            end
-        end
-    end
-    if addon.UpdateKnownSpellsUI then pcall(addon.UpdateKnownSpellsUI, addon) end
-end
 
 function addon:GetKnownSpells()
     local list = {}
@@ -122,7 +95,7 @@ function addon:GetKnownSpells()
 end
 
 function addon:GetGCD()
-    local start, duration = GetSpellCooldown(7386)
+    local start, duration = GetSpellCooldown(7386) -- Sunder Armor
     if not start or start == 0 then
         return 0, 0
     end
@@ -141,7 +114,10 @@ function addon:IsGCDReady()
 end
 
 function addon:GetCooldown(spellID)
-    local name = addon:SpellName(spellID)
+    if not spellID or spellID == 0 then return 0, 0, false end
+    
+    -- 3.3.5'te GetSpellCooldown ID yerine İsim ister
+    local name = GetSpellInfo(spellID)
     if not name then return 0, 0, false end
     
     local start, duration, enabled = GetSpellCooldown(name)
@@ -176,13 +152,15 @@ function addon:IsSpellUsable(spellID)
 end
 
 function addon:IsSpellReady(spellID, ignoreGCD)
+    if not spellID or spellID == 0 then return false end
     local name = addon:SpellName(spellID)
     if not name then return false end
-    if not addon:IsSpellKnown(spellID) then return false end
     
+    -- IsUsableSpell check
     local usable, noMana = IsUsableSpell(name)
     if not usable then return false end
     
+    -- Cooldown check
     local cdRemaining = addon:CooldownRemaining(spellID)
     local threshold = ignoreGCD and 0 or (addon.db.engine.gcdTolerance or 0.1)
     

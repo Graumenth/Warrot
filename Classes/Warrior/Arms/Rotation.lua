@@ -21,6 +21,13 @@ function Arms:Build(queue, maxLen, state, Add)
     local sp = addon.spells
     
     if not db.enabled then return end
+
+    if addon:IsSpellReady(sp.Charge) and state.stance == "battle" and addon:IsInRange(sp.Charge) and not addon:IsInRange(sp.MortalStrike) and state.hasTarget then
+        Add(queue, sp.Charge, 200, maxLen) -- Give it the highest priority
+        if not state.inCombat then
+            return
+        end
+    end
     
     local rage = state.rage
     local msReady = addon:IsSpellReady(sp.MortalStrike)

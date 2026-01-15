@@ -35,7 +35,6 @@ function Fury:Build(queue, maxLen, state, Add)
     end
     
     if db.useSlam and state.bloodsurge and addon:IsSpellReady(sp.Slam) then
-        Add(queue, sp.Bloodsurge_SLAM, PRIORITY.BLOODSURGE_SLAM, maxLen)
         Add(queue, sp.Slam, PRIORITY.BLOODSURGE_SLAM, maxLen)
     end
     

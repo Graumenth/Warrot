@@ -19,8 +19,10 @@ addon.state = addon.state or {
     lastCastTime = 0,
     targetGUID = nil,
     procs = {},
-    dodged = false,
+    dodged = false,       -- Overpower için (Rakip dodge'larsa)
     dodgeExpire = 0,
+    revengeAvailable = false, -- Revenge için (Ben dodge/parry/block yaparsam)
+    revengeExpire = 0,
 }
 
 local eventFrame = CreateFrame("Frame")
@@ -47,26 +49,74 @@ local events = {
 }
 
 local function OnCombatLog(timestamp, eventType, srcGUID, srcName, srcFlags, dstGUID, dstName, dstFlags, ...)
-    if srcGUID ~= UnitGUID("player") then return end
+    local isSrcPlayer = (srcGUID == UnitGUID("player"))
+    local isDstPlayer = (dstGUID == UnitGUID("player"))
     
-    if eventType == "SWING_MISSED" or eventType == "SPELL_MISSED" then
-        local missType
+    -- OVERPOWER MANTIĞI: Ben vurdum, rakip Dodge'ladı
+    if isSrcPlayer then
         if eventType == "SWING_MISSED" then
-            missType = select(1, ...)
-        else
-            missType = select(4, ...)
+            local missType = select(1, ...)
+            if missType == "DODGE" then
+                addon.state.dodged = true
+                addon.state.dodgeExpire = GetTime() + 5
+            end
+        elseif eventType == "SPELL_MISSED" then
+            local _, _, _, missType = ...
+            if missType == "DODGE" then
+                addon.state.dodged = true
+                addon.state.dodgeExpire = GetTime() + 5
+            end
         end
+    end
+
+    -- REVENGE MANTIĞI: Rakip vurdu, ben Block/Dodge/Parry yaptım
+    if isDstPlayer then
+        local isRevengeProc = false
         
-        if missType == "DODGE" then
-            addon.state.dodged = true
-            addon.state.dodgeExpire = GetTime() + 5
+        if eventType == "SWING_MISSED" then
+            local missType = select(1, ...)
+            if missType == "BLOCK" or missType == "DODGE" or missType == "PARRY" then
+                isRevengeProc = true
+            end
+        elseif eventType == "SPELL_MISSED" then
+            local _, _, _, missType = ...
+            if missType == "BLOCK" or missType == "DODGE" or missType == "PARRY" then
+                isRevengeProc = true
+            end
+        elseif eventType == "SWING_DAMAGE" then
+            -- 3.3.5 SWING_DAMAGE args: amount, overkill, school, resisted, blocked, ...
+            local blocked = select(5, ...)
+            if blocked and blocked > 0 then 
+                isRevengeProc = true 
+            end
+        elseif eventType == "SPELL_DAMAGE" then
+            -- 3.3.5 SPELL_DAMAGE args: spellId, spellName, spellSchool, amount, overkill, school, resisted, blocked, ...
+            local blocked = select(8, ...)
+            if blocked and blocked > 0 then 
+                isRevengeProc = true 
+            end
+        end
+
+        if isRevengeProc then
+            addon.state.revengeAvailable = true
+            addon.state.revengeExpire = GetTime() + 5
         end
     end
     
-    if eventType == "SPELL_CAST_SUCCESS" then
-        local spellID = select(1, ...)
-        addon.state.lastCast = spellID
-        addon.state.lastCastTime = GetTime()
+    -- Revenge kullanınca proc'u sil
+    if isSrcPlayer and eventType == "SPELL_CAST_SUCCESS" then
+        local spellName = select(2, ...)
+        if spellName == "Revenge" or spellName == addon:SpellName(addon.spells and addon.spells.Revenge or 57823) then
+            addon.state.revengeAvailable = false
+        end
+    end
+    
+    -- Overpower kullanınca proc'u sil
+    if isSrcPlayer and eventType == "SPELL_CAST_SUCCESS" then
+        local spellName = select(2, ...)
+        if spellName == "Overpower" or spellName == addon:SpellName(addon.spells and addon.spells.Overpower or 7384) then
+            addon.state.dodged = false
+        end
     end
 end
 
@@ -98,15 +148,18 @@ function addon:UpdateProcs()
     procs.tasteForBlood = addon:HasBuff("player", spells.TasteForBlood)
     procs.bloodsurge = addon:HasBuff("player", spells.Bloodsurge)
     procs.swordAndBoard = addon:HasBuff("player", spells.SwordAndBoard)
-    procs.revenge = addon:HasBuff("player", spells.RevengeProc)
+    -- RevengeProc buff'ı WotLK'da görünmezdir, o yüzden Combat Log kullanıyoruz.
 end
 
 function addon:OnSpellCast(spell)
+    -- Yedek temizleme (OnCombatLog kaçırırsa diye)
     local spells = addon.spells
     if not spells then return end
     
     if spell == addon:SpellName(spells.Overpower) then
         addon.state.dodged = false
+    elseif spell == addon:SpellName(spells.Revenge) then
+        addon.state.revengeAvailable = false
     end
 end
 
@@ -161,11 +214,12 @@ local function OnEvent(self, event, ...)
     elseif event == "PLAYER_REGEN_ENABLED" then
         addon.state.inCombat = false
         addon.state.dodged = false
+        addon.state.revengeAvailable = false
         addon.state.procs = {}
         
     elseif event == "PLAYER_TARGET_CHANGED" then
         addon.state.targetGUID = UnitGUID("target")
-        addon.state.dodged = false
+        -- Hedef değişince procları silme, Warrior'da proclar oyuncu üzerindedir.
         
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         OnCombatLog(...)
@@ -174,8 +228,12 @@ local function OnEvent(self, event, ...)
         addon:UpdateProcs()
         
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" and arg1 == "player" then
-        local spell = select(2, ...)
+        local _, spell, _, _, spellID = ...
         addon:OnSpellCast(spell)
+
+        if addon.engine and addon.engine.queue and #addon.engine.queue > 0 and spellID == addon.engine.queue[1] then
+            addon.engine.pausedUntil = GetTime() + 0.3
+        end
         
     elseif event == "LEARNED_SPELL_IN_TAB" or event == "SPELLS_CHANGED" or event == "PLAYER_LEVEL_UP" then
         if addon.RefreshSpellIDs then addon:RefreshSpellIDs() end

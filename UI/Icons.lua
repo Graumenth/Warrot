@@ -181,6 +181,7 @@ function addon:InitIcons()
     local last = 0
     main:SetScript("OnUpdate", function(self, elapsed)
         if not addon.db then return end
+        if addon.engine and addon.engine.pausedUntil and GetTime() < addon.engine.pausedUntil then return end
         last = last + elapsed
         local interval = addon.db.engine.updateInterval or 0.05
         if last < interval then return end

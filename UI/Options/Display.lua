@@ -8,7 +8,24 @@ function addon:InstallSpellIDMouseoverHook()
     
     local function OnTooltipSetSpell(self)
         if not addon.db or not addon.db.display or not addon.db.display.showSpellIDs then return end
-        local _, id = self:GetSpell()
+        
+        local name, rank = self:GetSpell()
+        if not name then return end
+
+        local id = nil
+        
+        local link = GetSpellLink(name)
+        if link then
+             id = link:match("spell:(%d+)")
+        end
+        
+        if not id and addon.knownSpells then
+            local info = addon.knownSpells[name]
+            if info then
+                id = info.id
+            end
+        end
+
         if id then
             self:AddLine("Spell ID: " .. id, 0.8, 0.8, 0.8)
             self:Show()
@@ -49,11 +66,6 @@ function addon:InitOptionsDisplay()
     Options:CreateCheckbox(p, "Fade Out of Range", 10, -140,
         function() return addon.db.display.fadeOutOfRange end,
         function(v) addon.db.display.fadeOutOfRange = v end
-    )
-    
-    Options:CreateCheckbox(p, "Show Placeholders", 10, -165,
-        function() return addon.db.display.showPlaceholders end,
-        function(v) addon.db.display.showPlaceholders = v end
     )
     
     Options:CreateHeader(p, "Size & Layout", 10, -210)

@@ -38,8 +38,14 @@ local function BuildState()
     s.bloodsurge = procs.bloodsurge or false
     s.swordAndBoard = procs.swordAndBoard or false
     
-    local revUsable, _ = IsUsableSpell(addon:SpellName(addon.spells.Revenge))
-    s.revengeUsable = revUsable
+    -- YENİ REVENGE KONTROLÜ: Combat Log Takibi
+    s.revengeUsable = false
+    if addon.state.revengeAvailable and (addon.state.revengeExpire > s.time) then
+        -- Proc var, peki Stance doğru mu?
+        if s.stance == "defensive" then
+            s.revengeUsable = true
+        end
+    end
     
     local spells = addon.spells
     if spells then
@@ -139,6 +145,7 @@ function addon:BuildQueue()
         addon:Debug(s)
     end
 
+    addon.engine.queue = flat
     return flat
 end
 

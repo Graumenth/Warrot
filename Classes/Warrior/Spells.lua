@@ -53,39 +53,42 @@ for _, spell in ipairs(spellList) do
     addon.spellInfo[spell.key] = spell
 end
 
+-- Fix: Use the robust scanner from Utils.lua
 local function FindSpellID(targetName)
-    if not GetNumSpellTabs then return nil end
+    if not targetName then return nil end
     
-    for tab = 1, GetNumSpellTabs() do
-        local _, _, offset, numSpells = GetSpellTabInfo(tab)
-        if offset and numSpells then
-            for i = offset + 1, offset + numSpells do
-                local name, rank = GetSpellName(i, BOOKTYPE_SPELL)
-                if name then
-                    local baseName = name:gsub("%s*%(.*%)%s*$", "")
-                    baseName = baseName:match("^%s*(.-)%s*$") or baseName
-                    if baseName == targetName then
-                        local link = GetSpellLink(i, BOOKTYPE_SPELL)
-                        if link then
-                            local id = tonumber(link:match("spell:(%d+)"))
-                            if id then return id end
-                        end
-                    end
-                end
-            end
-        end
+    -- 1. Try cache populated by Utils.lua (Robust)
+    if addon.knownSpells and addon.knownSpells[targetName] then
+        return addon.knownSpells[targetName].id
     end
+    
+    -- 2. Try direct link (Backup)
+    local link = GetSpellLink(targetName)
+    if link then
+        local id = link:match("spell:(%d+)")
+        if id then return tonumber(id) end
+    end
+    
     return nil
 end
 
 function addon:RefreshSpellIDs()
+    -- Ensure we have the latest known spells
+    if addon.RefreshKnownSpells then 
+        addon:RefreshKnownSpells() 
+    end
+
     for key, _ in pairs(addon.spellNames) do
         addon.spells[key] = nil
     end
+    
     for _, spell in ipairs(spellList) do
         local id = FindSpellID(spell.name)
         if id then
             addon.spells[spell.key] = id
+        else
+            -- Debug log if debug enabled
+            -- if addon.db and addon.db.debug then addon:Debug("Spell not found: " .. spell.name) end
         end
     end
 end

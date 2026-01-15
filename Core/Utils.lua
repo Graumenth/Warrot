@@ -45,6 +45,11 @@ function addon:IsSpellKnown(spellID)
         return nil
     end
 
+    -- If we have a cached known-spells table, use it
+    if addon.knownSpells and addon.knownSpells[name] then
+        return true
+    end
+
     for tab = 1, (GetNumSpellTabs and GetNumSpellTabs() or 0) do
         local a,b,offset,numSpells = GetSpellTabInfo(tab)
         for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
@@ -55,6 +60,21 @@ function addon:IsSpellKnown(spellID)
         end
     end
     return false
+end
+
+function addon:RefreshKnownSpells()
+    addon.knownSpells = addon.knownSpells or {}
+    wipe(addon.knownSpells)
+
+    for tab = 1, (GetNumSpellTabs and GetNumSpellTabs() or 0) do
+        local a,b,offset,numSpells = GetSpellTabInfo(tab)
+        for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
+            local spellName = GetSpellBookItemName and GetSpellBookItemName(i, BOOKTYPE_SPELL) or GetSpellBookItemInfo and GetSpellBookItemInfo(i)
+            if spellName and spellName ~= "" then
+                addon.knownSpells[spellName] = true
+            end
+        end
+    end
 end
 
 function addon:GetGCD()

@@ -1,7 +1,5 @@
 local addonName, addon = ...
 
--- Bootstrap core tables early so other files (rotations, classes, etc.) can
--- safely write to them even if Core Init hasn't run yet.
 addon.rotations = addon.rotations or {}
 addon.frames = addon.frames or {}
 addon.modules = addon.modules or {}
@@ -81,6 +79,7 @@ local defaults = {
         useThunderClap = true,
         useDemoralizingShout = true,
         maintainDebuffs = true,
+        useShieldBlock = true,
     },
 }
 

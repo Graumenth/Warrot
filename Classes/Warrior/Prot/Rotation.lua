@@ -6,6 +6,7 @@ local Prot = {}
 addon.rotations.prot = Prot
 
 local PRIORITY = {
+    SHIELD_BLOCK = 110,
     SHIELD_SLAM_PROC = 100,
     REVENGE = 95,
     SHIELD_SLAM = 90,
@@ -28,6 +29,12 @@ function Prot:Build(queue, maxLen, state, Add)
     local ssReady = addon:IsSpellReady(sp.ShieldSlam)
     local ssCooldown = addon:CooldownRemaining(sp.ShieldSlam)
     
+    if db.useShieldBlock and addon:IsSpellReady(sp.ShieldBlock) then
+        if rage >= addon:GetRageCost(sp.ShieldBlock) then
+            Add(queue, sp.ShieldBlock, PRIORITY.SHIELD_BLOCK, maxLen)
+        end
+    end
+    
     if db.useShieldSlam and state.swordAndBoard and ssReady then
         if rage >= addon:GetRageCost(sp.ShieldSlam) then
             Add(queue, sp.ShieldSlam, PRIORITY.SHIELD_SLAM_PROC, maxLen)
@@ -35,11 +42,10 @@ function Prot:Build(queue, maxLen, state, Add)
     end
     
     if db.useRevenge then
-        if not state.revengeReady and addon.db and addon.db.debug then addon:Debug("Prot: Revenge proc not active") end
-        if state.revengeReady and addon:IsSpellReady(sp.Revenge) then
-        if rage >= addon:GetRageCost(sp.Revenge) then
-            Add(queue, sp.Revenge, PRIORITY.REVENGE, maxLen)
-        end
+        if state.revengeUsable and addon:IsSpellReady(sp.Revenge) then
+            if rage >= addon:GetRageCost(sp.Revenge) then
+                Add(queue, sp.Revenge, PRIORITY.REVENGE, maxLen)
+            end
         end
     end
     
@@ -93,9 +99,15 @@ function Prot:Build(queue, maxLen, state, Add)
     
     if db.useDevastate and addon:IsSpellReady(sp.Devastate) then
         if rage >= addon:GetRageCost(sp.Devastate) then
+            local priority = PRIORITY.DEVASTATE
+            
+            if (state.sunderStacks or 0) < 5 then
+                priority = PRIORITY.SHIELD_SLAM + 1 
+            end
+
             local ssSoon = ssCooldown > 0 and ssCooldown < 1.5
-            if not ssSoon or rage >= 40 then
-                Add(queue, sp.Devastate, PRIORITY.DEVASTATE, maxLen)
+            if not ssSoon or rage >= 40 or priority > PRIORITY.DEVASTATE then
+                Add(queue, sp.Devastate, priority, maxLen)
             end
         end
     end
@@ -103,7 +115,14 @@ function Prot:Build(queue, maxLen, state, Add)
     if db.useHeroicStrike then
         local hsThreshold = db.hsRageThreshold or 50
         if rage >= hsThreshold then
-            Add(queue, sp.HeroicStrike, PRIORITY.HEROIC_STRIKE, maxLen)
+            local safeToHS = true
+            if ssCooldown > 0 and ssCooldown < 1.5 and rage < 60 then
+                safeToHS = false
+            end
+            
+            if safeToHS then
+                Add(queue, sp.HeroicStrike, PRIORITY.HEROIC_STRIKE, maxLen)
+            end
         end
     end
     

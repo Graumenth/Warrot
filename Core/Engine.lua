@@ -1,6 +1,7 @@
 local addonName, addon = ...
 
 local GetTime = GetTime
+local IsUsableSpell = IsUsableSpell
 
 addon.engine = {
     queue = {},
@@ -36,7 +37,9 @@ local function BuildState()
     s.tasteForBlood = procs.tasteForBlood or false
     s.bloodsurge = procs.bloodsurge or false
     s.swordAndBoard = procs.swordAndBoard or false
-    s.revengeReady = procs.revenge or false
+    
+    local revUsable, _ = IsUsableSpell(addon:SpellName(addon.spells.Revenge))
+    s.revengeUsable = revUsable
     
     local spells = addon.spells
     if spells then
@@ -63,7 +66,6 @@ end
 local function AddToQueue(queue, spellID, priority, maxLen)
     if #queue >= maxLen then return false end
     if not spellID then return false end
-    -- Don't add spells the player doesn't know or that have no icon
     if not addon:IsSpellKnown(spellID) then return false end
     if not addon:SpellTexture(spellID) then return false end
     

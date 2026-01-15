@@ -17,6 +17,12 @@ Core\Engine.lua
 Core\Commands.lua
 
 UI\Icons.lua
-UI\Options.lua
+UI\Options\Core.lua
+UI\Options\General.lua
+UI\Options\Display.lua
+UI\Options\Arms.lua
+UI\Options\Fury.lua
+UI\Options\Prot.lua
+UI\Options\Known.lua
 
 Core\Init.lua

@@ -15,6 +15,9 @@ local UnitIsDead = UnitIsDead
 local UnitCanAttack = UnitCanAttack
 local UnitAffectingCombat = UnitAffectingCombat
 
+local scanTooltip = CreateFrame("GameTooltip", "WarriorRotationScanTooltip", nil, "GameTooltipTemplate")
+scanTooltip:SetOwner(WorldFrame, "ANCHOR_NONE")
+
 function addon:SpellName(spellID)
     if not spellID then return nil end
     return GetSpellInfo(spellID)
@@ -29,8 +32,6 @@ end
 function addon:IsSpellKnown(spellID)
     local name = addon:SpellName(spellID)
     if not name then return false end
-    -- Compatibility: different clients expose different spellbook APIs. Try
-    -- several possible functions to read a spell name from a spellbook slot.
     local function GetSpellBookName(slot)
         if type(GetSpellBookItemName) == "function" then
             return GetSpellBookItemName(slot, BOOKTYPE_SPELL)
@@ -45,7 +46,6 @@ function addon:IsSpellKnown(spellID)
         return nil
     end
 
-    -- If we have a cached known-spells table, use it
     if addon.knownSpells and addon.knownSpells[name] then
         return true
     end
@@ -83,7 +83,6 @@ function addon:RefreshKnownSpells()
         for i = (offset or 0) + 1, (offset or 0) + (numSpells or 0) do
             local spellName = GetSpellBookName(i)
             if spellName and spellName ~= "" then
-                -- try to get spellID from link if possible
                 local id
                 local hasLink, link
                 if type(GetSpellLink) == "function" then
@@ -93,17 +92,13 @@ function addon:RefreshKnownSpells()
                     end
                 end
 
-                -- fallback: try GetSpellBookItemInfo to get name and possibly id
                 if not id and type(GetSpellBookItemInfo) == "function" then
                     local info = { GetSpellBookItemInfo(i) }
-                    -- GetSpellBookItemInfo may return spellName as first return
-                    -- and sometimes spellID as other returns in some clients; try to find number
                     for _, v in ipairs(info) do
                         if type(v) == "number" then id = v; break end
                     end
                 end
 
-                -- store highest id for this base name (strip rank from display name)
                 local base = spellName:gsub("%s*%(.+%)", "")
                 base = base:gsub("^%s+", ""):gsub("%s+$", "")
                 addon.knownSpells[base] = addon.knownSpells[base] or {}
@@ -127,7 +122,7 @@ function addon:GetKnownSpells()
 end
 
 function addon:GetGCD()
-    local start, duration = GetSpellCooldown(78)
+    local start, duration = GetSpellCooldown(7386)
     if not start or start == 0 then
         return 0, 0
     end
@@ -171,6 +166,13 @@ function addon:CooldownRemaining(spellID)
     end
     
     return remaining
+end
+
+function addon:IsSpellUsable(spellID)
+    local name = addon:SpellName(spellID)
+    if not name then return false, false end
+    local usable, noMana = IsUsableSpell(name)
+    return usable and true or false, noMana and true or false
 end
 
 function addon:IsSpellReady(spellID, ignoreGCD)
@@ -340,4 +342,29 @@ end
 
 function addon:IsExecutePhase()
     return addon:TimeToExecute() == 0
+end
+
+function addon:GetRageCost(spellID)
+    local name = addon:SpellName(spellID)
+    if not name then return 0 end
+
+    scanTooltip:ClearLines()
+    scanTooltip:SetSpellByID(spellID)
+    
+    local cost = 0
+    for i = 1, scanTooltip:NumLines() do
+        local line = _G["WarriorRotationScanTooltipTextLeft" .. i]
+        if line then
+            local text = line:GetText()
+            if text then
+                local rage = text:match("(%d+) Rage")
+                if rage then
+                    cost = tonumber(rage)
+                    break
+                end
+            end
+        end
+    end
+    
+    return cost
 end

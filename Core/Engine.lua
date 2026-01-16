@@ -7,6 +7,7 @@ local pairs = pairs
 local math_max = math.max
 local math_min = math.min
 local random = math.random
+local IsUsableSpell = IsUsableSpell
 
 addon.engine = {
     queue = {},
@@ -40,8 +41,9 @@ local function InitActionDefinitions()
         cd = 5,
         gcd = 1.5,
         rageCost = 5,
+        usable = function(s) return s.isUsable[addon.spells.Revenge] end, 
         handler = function(s)
-            s.revengeActive = false
+            s.isUsable[addon.spells.Revenge] = false 
         end
     })
     
@@ -172,7 +174,54 @@ local function InitActionDefinitions()
     Define("VictoryRush", {
         cd = 0,
         gcd = 1.5,
-        rageCost = 0
+        rageCost = 0,
+        usable = function(s) return s.isUsable[addon.spells.VictoryRush] end
+    })
+
+    Define("MortalStrike", {
+        cd = 6,
+        gcd = 1.5,
+        rageCost = 30
+    })
+
+    Define("Bloodthirst", {
+        cd = 4,
+        gcd = 1.5,
+        rageCost = 20
+    })
+
+    Define("Whirlwind", {
+        cd = 10,
+        gcd = 1.5,
+        rageCost = 25
+    })
+
+    Define("Overpower", {
+        cd = 5,
+        gcd = 1.5,
+        rageCost = 5,
+        usable = function(s) return s.isUsable[addon.spells.Overpower] or s:HasBuff(addon.spells.TasteForBlood) end
+    })
+
+    Define("Rend", {
+        cd = 0,
+        gcd = 1.5,
+        rageCost = 10,
+        handler = function(s)
+             s.debuffs[addon.spells.Rend] = s.time + 15
+        end
+    })
+    
+    Define("Bladestorm", {
+        cd = 90,
+        gcd = 1.5,
+        rageCost = 25
+    })
+    
+    Define("SweepingStrikes", {
+        cd = 30,
+        gcd = 1.5,
+        rageCost = 30
     })
 end
 
@@ -190,13 +239,16 @@ local function GetSnapshot()
     s.cooldowns = {}
     s.buffs = {}
     s.debuffs = {}
+    s.isUsable = {} 
     
     local relevantBuffs = {
         addon.spells.SwordAndBoard,
         addon.spells.ShieldBlock,
         addon.spells.SuddenDeath,
         addon.spells.Bloodsurge,
-        addon.spells.VictoryRush
+        addon.spells.VictoryRush,
+        addon.spells.TasteForBlood,
+        addon.spells.SuddenDeath
     }
     
     for _, id in ipairs(relevantBuffs) do
@@ -210,10 +262,27 @@ local function GetSnapshot()
         end
     end
 
+    local reactiveSpells = {
+        addon.spells.VictoryRush,
+        addon.spells.Revenge,
+        addon.spells.Overpower
+    }
+    
+    for _, id in ipairs(reactiveSpells) do
+        if id then
+            local name = addon:SpellName(id)
+            if name then
+                local usable, nomana = IsUsableSpell(name)
+                s.isUsable[id] = (usable == true)
+            end
+        end
+    end
+
     local relevantDebuffs = {
         addon.spells.SunderArmor,
         addon.spells.ThunderClap,
-        addon.spells.DemoralizingShout
+        addon.spells.DemoralizingShout,
+        addon.spells.Rend
     }
 
     for _, id in ipairs(relevantDebuffs) do
@@ -239,7 +308,9 @@ local function GetSnapshot()
         addon.spells.Bloodthirst,
         addon.spells.Whirlwind,
         addon.spells.HeroicThrow,
-        addon.spells.Bloodrage
+        addon.spells.Bloodrage,
+        addon.spells.Overpower,
+        addon.spells.SweepingStrikes
     }
 
     for _, id in ipairs(relevantCDs) do
@@ -293,6 +364,10 @@ local function GetSnapshot()
         end
         
         if self.rage < cost then return false end
+        
+        if type(def.usable) == "function" then
+            if not def.usable(self) then return false end
+        end
         
         return true
     end
@@ -358,7 +433,8 @@ function addon:BuildQueue()
     
     local spec = db.spec
     local rotation = addon.rotations[spec]
-    if not rotation then return {} end
+    
+    if not rotation or not rotation.GetNextAction then return {} end
     
     local queue = {}
     local maxLen = db.display.queueLength or 4

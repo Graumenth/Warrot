@@ -5,153 +5,131 @@ addon.rotations = addon.rotations or {}
 local Prot = {}
 addon.rotations.prot = Prot
 
-local PRIORITY = {
-    SHIELD_BLOCK = 110,
-    SHIELD_SLAM_PROC = 100,
-    REVENGE = 95,
-    SHIELD_SLAM = 90,
-    SHOCKWAVE = 85,
-    CONCUSSION_BLOW = 80,
-    THUNDER_CLAP = 75,
-    DEMO_SHOUT = 70,
-    DEVASTATE = 65,
-    HEROIC_STRIKE = 50,
-    HEROIC_THROW = 40,
-}
+local function EvaluateVariables(state, db)
+    local vars = {}
+    
+    vars.should_sunder = db.maintainDebuffs
+    vars.build_sunder = vars.should_sunder and (state.sunderStacks < 5)
+    vars.maintain_sunder = vars.should_sunder and (state.sunderStacks == 5) and (state:GetDebuffRemains(addon.spells.SunderArmor) < 5)
+    vars.emergency_sunder = vars.should_sunder and (state.sunderStacks > 0) and (state:GetDebuffRemains(addon.spells.SunderArmor) < 3)
+    
+    return vars
+end
 
-function Prot:Build(queue, maxLen, state, Add)
+function Prot:GetNextAction(state)
     local db = addon.db.prot
     local sp = addon.spells
     
-    if not db.enabled then return end
+    local vars = EvaluateVariables(state, db)
+    local active_enemies = 1 
     
-    local rage = state.rage
-    local ssReady = addon:IsSpellReady(sp.ShieldSlam)
-    local ssCooldown = addon:CooldownRemaining(sp.ShieldSlam)
-    
-    if db.useShieldBlock and addon:IsSpellReady(sp.ShieldBlock) then
-        if rage >= addon:GetRageCost(sp.ShieldBlock) then
-            Add(queue, sp.ShieldBlock, PRIORITY.SHIELD_BLOCK, maxLen)
-        end
+    if sp.VictoryRush and state:CanCast(sp.VictoryRush) then
+        return sp.VictoryRush
+    end
+
+    if sp.Bloodrage and state.rage < 30 and state:CanCast(sp.Bloodrage) then
+        return sp.Bloodrage
     end
     
-    if db.useShieldSlam and state.swordAndBoard and ssReady then
-        if rage >= addon:GetRageCost(sp.ShieldSlam) then
-            Add(queue, sp.ShieldSlam, PRIORITY.SHIELD_SLAM_PROC, maxLen)
-        end
-    end
+    local rageThreshold = db.hsRageThreshold or 50
     
-    if db.useRevenge then
-        if state.revengeUsable and addon:IsSpellReady(sp.Revenge) then
-            if rage >= addon:GetRageCost(sp.Revenge) then
-                Add(queue, sp.Revenge, PRIORITY.REVENGE, maxLen)
+    if state.rage >= rageThreshold then
+        if active_enemies > 1 then
+            if sp.Cleave and db.useHeroicStrike and state:CanCast(sp.Cleave) then 
+                return sp.Cleave
+            end
+        else
+            if sp.HeroicStrike and db.useHeroicStrike and state:CanCast(sp.HeroicStrike) then
+                return sp.HeroicStrike
             end
         end
     end
     
-    if db.useShieldSlam and ssReady and not state.swordAndBoard then
-        if rage >= addon:GetRageCost(sp.ShieldSlam) then
-            Add(queue, sp.ShieldSlam, PRIORITY.SHIELD_SLAM, maxLen)
+    if sp.ShieldBlock and db.useShieldBlock and state:CanCast(sp.ShieldBlock) then
+        if sp.ShieldSlam and state:IsKnown(sp.ShieldSlam) and state:GetCD(sp.ShieldSlam) < 2 then
+            return sp.ShieldBlock
         end
     end
-    
-    if db.useShockwave and addon:IsSpellReady(sp.Shockwave) then
-        if rage >= addon:GetRageCost(sp.Shockwave) then
-            Add(queue, sp.Shockwave, PRIORITY.SHOCKWAVE, maxLen)
+
+    if vars.emergency_sunder then
+        if sp.Devastate and state:CanCast(sp.Devastate) then
+            return sp.Devastate
+        elseif sp.SunderArmor and state:CanCast(sp.SunderArmor) then
+            return sp.SunderArmor
         end
     end
-    
-    if db.useConcussionBlow and addon:IsSpellReady(sp.ConcussionBlow) then
-        if rage >= addon:GetRageCost(sp.ConcussionBlow) then
-            Add(queue, sp.ConcussionBlow, PRIORITY.CONCUSSION_BLOW, maxLen)
+
+    if active_enemies > 1 then
+        if sp.Shockwave and db.useShockwave and state:CanCast(sp.Shockwave) then
+            return sp.Shockwave
         end
+        
+        if sp.ThunderClap and db.useThunderClap and state:CanCast(sp.ThunderClap) then
+            return sp.ThunderClap
+        end
+        
+        if sp.Revenge and db.useRevenge and state.revengeActive and state:CanCast(sp.Revenge) then
+            return sp.Revenge
+        end
+        
+        if sp.ShieldSlam and db.useShieldSlam and state:CanCast(sp.ShieldSlam) then
+            return sp.ShieldSlam
+        end
+        
+        if sp.Devastate and db.useDevastate and state:CanCast(sp.Devastate) then
+            return sp.Devastate
+        end
+        
+        if sp.SunderArmor and state:CanCast(sp.SunderArmor) then
+            return sp.SunderArmor
+        end
+
+        return nil 
+    end
+
+    if sp.ShieldSlam and db.useShieldSlam and state:CanCast(sp.ShieldSlam) then
+        return sp.ShieldSlam
+    end
+    
+    if sp.Revenge and db.useRevenge and state.revengeActive and state:CanCast(sp.Revenge) then
+        return sp.Revenge
+    end
+    
+    if sp.Shockwave and db.useShockwave and state:CanCast(sp.Shockwave) then
+        return sp.Shockwave
+    end
+    
+    if sp.ConcussionBlow and db.useConcussionBlow and state:CanCast(sp.ConcussionBlow) then
+        return sp.ConcussionBlow
     end
     
     if db.maintainDebuffs then
-        if db.useThunderClap and addon:IsSpellReady(sp.ThunderClap) then
-            local shouldTC = false
-            if not state.hasThunderClap then
-                shouldTC = true
-            elseif state.thunderClapRemaining < 3 then
-                shouldTC = true
-            end
-            
-            if shouldTC and rage >= addon:GetRageCost(sp.ThunderClap) then
-                if state.stance == "battle" or state.stance == "defensive" then
-                    Add(queue, sp.ThunderClap, PRIORITY.THUNDER_CLAP, maxLen)
-                end
+        if sp.DemoralizingShout and db.useDemoralizingShout and state:CanCast(sp.DemoralizingShout) then
+            local demoRemains = state:GetDebuffRemains(sp.DemoralizingShout)
+            if demoRemains < 3 then
+                return sp.DemoralizingShout
             end
         end
         
-        if db.useDemoralizingShout and addon:IsSpellReady(sp.DemoralizingShout) then
-            local shouldDS = false
-            if not state.hasDemoShout then
-                shouldDS = true
-            elseif state.demoShoutRemaining < 5 then
-                shouldDS = true
-            end
-            
-            if shouldDS and rage >= addon:GetRageCost(sp.DemoralizingShout) then
-                Add(queue, sp.DemoralizingShout, PRIORITY.DEMO_SHOUT, maxLen)
+        if sp.ThunderClap and db.useThunderClap and state:CanCast(sp.ThunderClap) then
+            local tcRemains = state:GetDebuffRemains(sp.ThunderClap)
+            if tcRemains < 3 then
+                return sp.ThunderClap
             end
         end
     end
     
-    if db.useDevastate and addon:IsSpellReady(sp.Devastate) then
-        if rage >= addon:GetRageCost(sp.Devastate) then
-            local priority = PRIORITY.DEVASTATE
-            
-            if (state.sunderStacks or 0) < 5 then
-                priority = PRIORITY.SHIELD_SLAM + 1 
+    if db.useDevastate then
+        if sp.Devastate and state:IsKnown(sp.Devastate) then
+            if state:CanCast(sp.Devastate) then
+                return sp.Devastate
             end
-
-            local ssSoon = ssCooldown > 0 and ssCooldown < 1.5
-            if not ssSoon or rage >= 40 or priority > PRIORITY.DEVASTATE then
-                Add(queue, sp.Devastate, priority, maxLen)
+        elseif sp.SunderArmor and state:IsKnown(sp.SunderArmor) and state:CanCast(sp.SunderArmor) then
+            if state.sunderStacks < 5 or vars.maintain_sunder then
+                return sp.SunderArmor
             end
         end
     end
     
-    if db.useHeroicStrike then
-        local hsThreshold = db.hsRageThreshold or 50
-        if rage >= hsThreshold then
-            local safeToHS = true
-            if ssCooldown > 0 and ssCooldown < 1.5 and rage < 60 then
-                safeToHS = false
-            end
-            
-            if safeToHS then
-                Add(queue, sp.HeroicStrike, PRIORITY.HEROIC_STRIKE, maxLen)
-            end
-        end
-    end
-    
-    if db.useHeroicThrow and addon:IsSpellReady(sp.HeroicThrow) then
-        if not state.inMelee then
-            Add(queue, sp.HeroicThrow, PRIORITY.HEROIC_THROW, maxLen)
-        end
-    end
-    
-    self:AddUpcoming(queue, maxLen, state, Add)
-end
-
-function Prot:AddUpcoming(queue, maxLen, state, Add)
-    local db = addon.db.prot
-    local sp = addon.spells
-    
-    if #queue >= maxLen then return end
-    
-    local window = addon.db.engine.predictionWindow or 1.5
-    
-    if db.useShieldSlam and addon:SpellWillBeReady(sp.ShieldSlam, window) then
-        Add(queue, sp.ShieldSlam, PRIORITY.SHIELD_SLAM - 10, maxLen)
-    end
-    
-    if db.useRevenge and addon:SpellWillBeReady(sp.Revenge, window) then
-        Add(queue, sp.Revenge, PRIORITY.REVENGE - 10, maxLen)
-    end
-    
-    if db.useShockwave and addon:SpellWillBeReady(sp.Shockwave, window) then
-        Add(queue, sp.Shockwave, PRIORITY.SHOCKWAVE - 10, maxLen)
-    end
+    return nil
 end
